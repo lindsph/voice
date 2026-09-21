@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Profile {
+  id             String     @id
+  name           String
+  description    String     @default("")
+  guide          String
+  systemPrompt   String
+  bannedForPrompt String    @default("[]")
+  surfaces       String     @default("[]")
+  updatedAt      DateTime   @updatedAt
+  golds          Gold[]
+  learnings      Learning[]
+}
+
+model Gold {
+  id         String   @id
+  profileId  String
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title      String
+  body       String
+  source     String
+  surface    String   @default("other")
+  canonical  Boolean  @default(false)
+  status     String   @default("active")
+  createdAt  DateTime
+
+  @@index([profileId, status, surface])
+}
+
+model Learning {
+  id            String   @id
+  profileId     String
+  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  rule          String
+  status        String   @default("active")
+  before        String   @default("")
+  after         String   @default("")
+  why           String   @default("")
+  surface       String   @default("")
+  sourceDraftId String?
+  createdAt     DateTime
+  updatedAt     DateTime
+
+  @@index([profileId, status, createdAt])
+}
