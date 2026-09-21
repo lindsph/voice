@@ -11,6 +11,23 @@ export type DerivedLearning = {
   why: string;
 };
 
+/** CIPHER wants a preference description, not the after-sentence in the prompt. */
+export function isQuotedSnippetRule(rule: string): boolean {
+  return /keep this voice|prefer\s+["“']|avoid phrasing like:/i.test(rule);
+}
+
+/**
+ * Pair for later DPO: approved body vs the raw generate.
+ * CIPHER’s ICL-edit baseline put this rejected text in the next prompt and
+ * lost. We store the pair. We do not inject it.
+ */
+export function rejectedFromApprove(before: string, after: string): string {
+  const raw = before.trim();
+  const kept = after.trim();
+  if (!raw || !kept || raw === kept) return "";
+  return raw;
+}
+
 const MIN_SNIP = 24;
 const MAX_RULE = 220;
 const MAX_SNIP = 100;

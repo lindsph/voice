@@ -14,6 +14,7 @@ export const goldSchema = z.object({
   profileId: z.string(),
   title: z.string(),
   body: z.string(),
+  rejected: z.string().optional().default(""),
   source: z.string(),
   surface: z.string(),
   canonical: z.boolean(),

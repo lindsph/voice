@@ -1,5 +1,8 @@
 import { formatToneBundle } from "./bundle";
+import { lintDraft } from "./slop";
 import type { Gold, Learning, Profile } from "./types";
+
+export { bannedHits } from "./slop";
 
 export const DRAFT_MODEL = process.env.OPENAI_DRAFT_MODEL?.trim() || "gpt-4o";
 export const DRAFT_TEMPERATURE = 0.45;
@@ -43,6 +46,8 @@ export function buildUserPrompt(input: {
       surface,
       surfaceId: input.surfaceId,
       seed: input.seed,
+      facts: input.facts,
+      profileId: input.profile.id,
       golds: input.golds,
       learnings: input.learnings,
     }),
@@ -54,11 +59,19 @@ export function buildUserPrompt(input: {
   ].join("\n");
 }
 
-export function bannedHits(body: string, banned: string[]): string[] {
-  const lower = body.toLowerCase();
-  return banned.filter((item) => {
-    const token = item.split("/")[0]?.trim().toLowerCase() ?? "";
-    return token.length >= 8 && lower.includes(token);
+function draftHits(
+  body: string,
+  input: {
+    profile: Profile;
+    surfaceId: string;
+  },
+): string[] {
+  const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
+  return lintDraft({
+    body,
+    banned: input.profile.bannedForPrompt,
+    surfaceId: input.surfaceId,
+    maxWords: surface?.maxWords,
   });
 }
 
@@ -72,12 +85,12 @@ export async function generateDraft(
     learnings: Pick<Learning, "rule" | "status">[];
   },
   complete: ChatComplete,
-): Promise<{ body: string; bundle: string; retried: boolean }> {
+): Promise<{ body: string; bundle: string; retried: boolean; warnings: string[] }> {
   const user = buildUserPrompt(input);
   const first = unwrapDraft(await complete({ system: input.profile.systemPrompt, user }));
-  const hits = bannedHits(first, input.profile.bannedForPrompt);
+  const hits = draftHits(first, input);
   if (hits.length === 0) {
-    return { body: first, bundle: user, retried: false };
+    return { body: first, bundle: user, retried: false, warnings: [] };
   }
   const second = unwrapDraft(
     await complete({
@@ -88,12 +101,19 @@ export async function generateDraft(
       }),
     }),
   );
-  return { body: second || first, bundle: user, retried: true };
+  const body = second || first;
+  return {
+    body,
+    bundle: user,
+    retried: true,
+    warnings: draftHits(body, input),
+  };
 }
 
 export async function completeWithOpenAi(input: {
   system: string;
   user: string;
+  temperature?: number;
 }): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
@@ -104,7 +124,7 @@ export async function completeWithOpenAi(input: {
   const completion = await client.chat.completions.create(
     {
       model: DRAFT_MODEL,
-      temperature: DRAFT_TEMPERATURE,
+      temperature: input.temperature ?? DRAFT_TEMPERATURE,
       messages: [
         { role: "system", content: input.system },
         { role: "user", content: input.user },

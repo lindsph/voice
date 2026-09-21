@@ -13,6 +13,7 @@ export type VoiceBundle = {
 export type VoiceDraft = {
   body: string;
   retried: boolean;
+  warnings?: string[];
 };
 
 export type VoiceLearnResult = {

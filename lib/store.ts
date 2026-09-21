@@ -1,7 +1,8 @@
 import { prisma } from "./db";
 import { formatToneBundle } from "./bundle";
 import { completeWithOpenAi, generateDraft } from "./generate";
-import { rulesFromEdit } from "./learn";
+import { inferPreference } from "./infer";
+import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
 import type { Gold, Learning, Profile, Surface } from "./types";
 
 function iso(value: Date): string {
@@ -43,6 +44,7 @@ function toGold(row: {
   profileId: string;
   title: string;
   body: string;
+  rejected?: string;
   source: string;
   surface: string;
   canonical: boolean;
@@ -54,6 +56,7 @@ function toGold(row: {
     profileId: row.profileId,
     title: row.title,
     body: row.body,
+    rejected: row.rejected ?? "",
     source: row.source,
     surface: row.surface,
     canonical: row.canonical,
@@ -129,6 +132,7 @@ export async function getBundle(input: {
   profileId: string;
   surface: string;
   seed?: string;
+  facts?: string;
 }): Promise<{ profile: Profile; bundle: string; golds: Gold[]; learnings: Learning[] }> {
   const [profile, golds, learnings] = await Promise.all([
     getProfile(input.profileId),
@@ -146,6 +150,8 @@ export async function getBundle(input: {
       surface,
       surfaceId: input.surface,
       seed: input.seed ?? input.surface,
+      facts: input.facts,
+      profileId: input.profileId,
       golds,
       learnings,
     }),
@@ -157,11 +163,12 @@ export async function generateForProfile(input: {
   surface: string;
   facts: string;
   seed?: string;
-}): Promise<{ body: string; retried: boolean; bundle: string }> {
+}): Promise<{ body: string; retried: boolean; bundle: string; warnings: string[] }> {
   const corpus = await getBundle({
     profileId: input.profileId,
     surface: input.surface,
     seed: input.seed,
+    facts: input.facts,
   });
   return generateDraft(
     {
@@ -188,20 +195,14 @@ export async function learnForProfile(input: {
   sourceDraftId?: string | null;
 }): Promise<{ learningCount: number; keptGold: boolean; learnings: Learning[] }> {
   const stamp = new Date();
-  const derived = input.rule?.trim()
-    ? [
-        {
-          rule: input.rule.trim(),
-          before: input.before ?? "",
-          after: input.after ?? "",
-          why: input.why ?? "",
-        },
-      ]
-    : rulesFromEdit({
-        before: input.before ?? "",
-        after: input.after ?? "",
-        why: input.why,
-      });
+  const inferred = await inferPreference({
+    before: input.before ?? "",
+    after: input.after ?? "",
+    why: input.why,
+    existingRule: input.rule,
+    surface: input.surface,
+  });
+  const derived = inferred && !isQuotedSnippetRule(inferred.rule) ? [inferred] : [];
 
   const existing = await prisma.learning.findMany({
     where: { profileId: input.profileId, status: "active" },
@@ -245,6 +246,7 @@ export async function learnForProfile(input: {
           profileId: input.profileId,
           title: input.title?.trim() || "Kept example",
           body: after,
+          rejected: rejectedFromApprove(input.before ?? "", after),
           source: `Kept ${iso(stamp).slice(0, 10)} as a gold example.`,
           surface: input.surface || "other",
           canonical: false,

@@ -33,14 +33,24 @@ export function ProfileDesk({ profile, golds, learnings }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ surface, facts: facts || "No extra facts." }),
       });
-      const payload = (await response.json()) as { body?: string; error?: string };
+      const payload = (await response.json()) as {
+        body?: string;
+        error?: string;
+        warnings?: string[];
+      };
       if (!response.ok || !payload.body) {
         setNotice(payload.error ?? "Could not draft.");
         return;
       }
       setBody(payload.body);
       setBaseline(payload.body);
-      setNotice("Drafted. Edit it, then teach.");
+      if (payload.warnings && payload.warnings.length > 0) {
+        setNotice(
+          `Drafted. Still a slop tell after one retry: ${payload.warnings.join("; ")}. Edit it, then teach.`,
+        );
+      } else {
+        setNotice("Drafted. Edit it, then teach.");
+      }
     } finally {
       setDrafting(false);
     }
@@ -162,7 +172,9 @@ export function ProfileDesk({ profile, golds, learnings }: Props) {
         <section className="card">
           <h2>What you’ve taught it</h2>
           {learnings.length === 0 ? (
-            <p className="meta">Edits you teach become rules for every app using this mouth.</p>
+            <p className="meta">
+              A real edit becomes one preference you can read. Tiny fixes do not teach.
+            </p>
           ) : (
             <ul className="learnings">
               {learnings.map((learning) => (

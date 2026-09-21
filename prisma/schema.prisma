@@ -27,6 +27,8 @@ model Gold {
   profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   title      String
   body       String
+  /// Raw generate that she rewrote. Stored for later DPO. Never prompt this.
+  rejected   String   @default("")
   source     String
   surface    String   @default("other")
   canonical  Boolean  @default(false)
