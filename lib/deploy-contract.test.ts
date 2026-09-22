@@ -31,6 +31,9 @@ describe("Voice stays a separate production app", () => {
     expect(script).not.toMatch(
       /git -C "\$VOICE_ROOT" status --porcelain/,
     );
+    expect(script).toMatch(/require_clean_pushed "\$COMMAND_ROOT" "Command"/);
+    expect(script).not.toMatch(/Command only/);
   });
 });
+
 

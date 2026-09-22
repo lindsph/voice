@@ -1,0 +1,10 @@
+---
+description: Voice and WoolGrown Command must pair-deploy from a clean pushed git SHA
+alwaysApply: true
+---
+
+# Fly pair deploy
+
+Never run `fly deploy` or `flyctl deploy` for `lindsay-voice` or `woolgrown-command`.
+
+Only `scripts/fly-deploy-pair.sh`. Voice first, then Command. Refuse dirty or unpushed trees. Do not bypass.
