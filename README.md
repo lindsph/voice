@@ -41,7 +41,7 @@ VOICE_TEACH=on          # per-integration lever (see below)
 
 Voice is its own Fly app (`lindsay-voice`) and Neon `voice` database. It does **not** ship inside `woolgrown-command`. Command only talks to it when `VOICE_URL` is set.
 
-Deploy the pair from either repo (Voice first if this checkout changed, then Command):
+Deploy the pair from either repo (Voice first if this checkout changed, then Command). The script refuses dirty or unpushed trees so Fly cannot ship leftover laptop files:
 
 ```bash
 # from Voice

@@ -10,6 +10,7 @@ describe("Voice stays a separate production app", () => {
     const toml = readFileSync(resolve(root, "fly.toml"), "utf8");
     expect(toml).toMatch(/app = 'lindsay-voice'/);
     expect(toml).toMatch(/internal_port = 3030/);
+    expect(toml).toMatch(/HOSTNAME = '::'/);
     expect(toml).not.toMatch(/app = 'woolgrown-command'/);
   });
 
@@ -21,5 +22,15 @@ describe("Voice stays a separate production app", () => {
     expect(script.indexOf("Deploying $VOICE_APP")).toBeLessThan(
       script.indexOf("Deploying $COMMAND_APP"),
     );
+    expect(script).toMatch(
+      /VOICE_URL=http:\/\/\$VOICE_APP\.internal:3030/,
+    );
+    expect(script).toMatch(/require_clean_pushed/);
+    expect(script).toMatch(/Refuse: \$label has uncommitted files/);
+    expect(script).toMatch(/Refuse: \$label HEAD is not the pushed tip/);
+    expect(script).not.toMatch(
+      /git -C "\$VOICE_ROOT" status --porcelain/,
+    );
   });
 });
+
