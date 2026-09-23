@@ -32,7 +32,14 @@ export function selectGoldExamples(
     Pick<Gold, "id" | "title" | "body" | "surface" | "canonical"> &
       Partial<Pick<Gold, "profileId" | "status">>
   >,
-  options: { surface: string; seed: string; count?: number; profileId?: string; query?: string },
+  options: {
+    surface: string;
+    seed: string;
+    count?: number;
+    profileId?: string;
+    query?: string;
+    architecture?: string;
+  },
 ): Pick<Gold, "id" | "title" | "body">[] {
   return retrieveGolds(examples, {
     profileId: options.profileId ?? "",
@@ -40,6 +47,7 @@ export function selectGoldExamples(
     query: options.query ?? "",
     seed: options.seed,
     k: options.count,
+    architecture: options.architecture,
   });
 }
 
@@ -74,8 +82,9 @@ export function formatToneBundle(input: {
   profileId?: string;
   golds: Array<
     Pick<Gold, "id" | "title" | "body" | "surface" | "canonical"> &
-      Partial<Pick<Gold, "profileId" | "status" | "rejected">>
+      Partial<Pick<Gold, "profileId" | "status" | "rejected" | "architecture">>
   >;
+  architecture?: string;
   learnings: Array<
     Pick<Learning, "rule" | "status"> &
       Partial<Pick<Learning, "id" | "profileId" | "surface" | "before" | "after" | "why" | "createdAt">>
@@ -88,6 +97,7 @@ export function formatToneBundle(input: {
     surface: input.surfaceId,
     query,
     seed: input.seed,
+    architecture: input.architecture,
   });
   const retrieved = retrieveLearnings(
     input.learnings.map((item, index) => ({

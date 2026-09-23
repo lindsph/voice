@@ -171,4 +171,49 @@ describe("retrieveGolds", () => {
     );
     expect(picked.map((item) => item.id)).toEqual(["ln"]);
   });
+
+  it("does not pull an event gold onto a how-to when architecture is set", () => {
+    const picked = retrieveGolds(
+      [
+        {
+          id: "howto",
+          profileId: "woolgrown",
+          title: "gardening-with-wool-pellets 1",
+          body: "Mix or spread the pellets, then water them in.",
+          surface: "blog",
+          architecture: "how-to-steps",
+          canonical: false,
+          status: "active",
+        },
+        {
+          id: "ex",
+          profileId: "woolgrown",
+          title: "woolgrown-is-heading-to-the-ex 1",
+          body: "This is a chance to talk directly about how wool pellets work.",
+          surface: "blog",
+          architecture: "proof-story",
+          canonical: false,
+          status: "active",
+        },
+        {
+          id: "old",
+          profileId: "woolgrown",
+          title: "untyped",
+          body: "Canadian sheep wool, made for gardens.",
+          surface: "blog",
+          architecture: "",
+          canonical: true,
+          status: "active",
+        },
+      ],
+      {
+        profileId: "woolgrown",
+        surface: "blog",
+        query: "how to use wool pellets in raised beds",
+        seed: "raised",
+        architecture: "how-to-steps",
+      },
+    );
+    expect(picked.map((item) => item.id)).toEqual(["howto"]);
+  });
 });

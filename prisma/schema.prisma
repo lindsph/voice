@@ -31,6 +31,8 @@ model Gold {
   rejected   String   @default("")
   source     String
   surface    String   @default("other")
+  /// Host-supplied kind (e.g. how-to-steps). Empty = untyped. Voice does not interpret it.
+  architecture String @default("")
   canonical  Boolean  @default(false)
   status     String   @default("active")
   createdAt  DateTime

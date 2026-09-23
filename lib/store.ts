@@ -47,6 +47,7 @@ function toGold(row: {
   rejected?: string;
   source: string;
   surface: string;
+  architecture?: string;
   canonical: boolean;
   status: string;
   createdAt: Date;
@@ -59,6 +60,7 @@ function toGold(row: {
     rejected: row.rejected ?? "",
     source: row.source,
     surface: row.surface,
+    architecture: row.architecture ?? "",
     canonical: row.canonical,
     status: row.status === "dismissed" ? "dismissed" : "active",
     createdAt: iso(row.createdAt),
@@ -133,6 +135,7 @@ export async function getBundle(input: {
   surface: string;
   seed?: string;
   facts?: string;
+  architecture?: string;
 }): Promise<{ profile: Profile; bundle: string; golds: Gold[]; learnings: Learning[] }> {
   const [profile, golds, learnings] = await Promise.all([
     getProfile(input.profileId),
@@ -152,6 +155,7 @@ export async function getBundle(input: {
       seed: input.seed ?? input.surface,
       facts: input.facts,
       profileId: input.profileId,
+      architecture: input.architecture,
       golds,
       learnings,
     }),
@@ -192,6 +196,7 @@ export async function learnForProfile(input: {
   keepAsGold?: boolean;
   title?: string;
   surface?: string;
+  architecture?: string;
   sourceDraftId?: string | null;
 }): Promise<{ learningCount: number; keptGold: boolean; learnings: Learning[] }> {
   const stamp = new Date();
@@ -237,9 +242,18 @@ export async function learnForProfile(input: {
   if (input.keepAsGold && after) {
     const golds = await prisma.gold.findMany({
       where: { profileId: input.profileId, status: "active" },
-      select: { body: true },
+      select: { id: true, body: true, architecture: true },
     });
-    if (!golds.some((gold) => gold.body.trim() === after)) {
+    const architecture = input.architecture?.trim() ?? "";
+    const existing = golds.find((gold) => gold.body.trim() === after);
+    if (existing) {
+      if (architecture && existing.architecture !== architecture) {
+        await prisma.gold.update({
+          where: { id: existing.id },
+          data: { architecture },
+        });
+      }
+    } else {
       await prisma.gold.create({
         data: {
           id: uniqueId("gold", input.profileId, String(Date.now())),
@@ -249,6 +263,7 @@ export async function learnForProfile(input: {
           rejected: rejectedFromApprove(input.before ?? "", after),
           source: `Kept ${iso(stamp).slice(0, 10)} as a gold example.`,
           surface: input.surface || "other",
+          architecture,
           canonical: false,
           status: "active",
           createdAt: stamp,

@@ -61,7 +61,7 @@ export function retrieveLearnings(
 export function retrieveGolds(
   golds: Array<
     Pick<Gold, "id" | "title" | "body" | "surface" | "canonical"> &
-      Partial<Pick<Gold, "profileId" | "status">>
+      Partial<Pick<Gold, "profileId" | "status" | "architecture">>
   >,
   options: {
     profileId: string;
@@ -69,13 +69,19 @@ export function retrieveGolds(
     query: string;
     seed: string;
     k?: number;
+    architecture?: string;
   },
 ): Pick<Gold, "id" | "title" | "body">[] {
   const k = options.k ?? RETRIEVE_GOLD_K;
+  const wantedArch = options.architecture?.trim() ?? "";
   const own = golds.filter((item) => {
     if (item.status && item.status !== "active") return false;
     if (!item.profileId || item.profileId !== options.profileId) return false;
-    return item.surface === options.surface;
+    if (item.surface !== options.surface) return false;
+    if (wantedArch && (item.architecture ?? "").trim() !== wantedArch) {
+      return false;
+    }
+    return true;
   });
   if (own.length === 0) return [];
 

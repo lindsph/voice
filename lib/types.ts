@@ -17,6 +17,7 @@ export const goldSchema = z.object({
   rejected: z.string().optional().default(""),
   source: z.string(),
   surface: z.string(),
+  architecture: z.string().optional().default(""),
   canonical: z.boolean(),
   status: z.enum(["active", "dismissed"]),
   createdAt: z.string(),
@@ -67,5 +68,6 @@ export const learnInputSchema = z.object({
   keepAsGold: z.boolean().optional().default(false),
   title: z.string().optional(),
   surface: z.string().optional().default(""),
+  architecture: z.string().optional().default(""),
   sourceDraftId: z.string().nullable().optional(),
 });

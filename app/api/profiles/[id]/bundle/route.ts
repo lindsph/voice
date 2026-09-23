@@ -15,7 +15,14 @@ export async function GET(request: Request, { params }: Props) {
     const surface = url.searchParams.get("surface") ?? "other";
     const seed = url.searchParams.get("seed") ?? undefined;
     const facts = url.searchParams.get("facts") ?? undefined;
-    const corpus = await getBundle({ profileId: id, surface, seed, facts });
+    const architecture = url.searchParams.get("architecture") ?? undefined;
+    const corpus = await getBundle({
+      profileId: id,
+      surface,
+      seed,
+      facts,
+      architecture: architecture || undefined,
+    });
     return NextResponse.json({
       bundle: corpus.bundle,
       profile: {
