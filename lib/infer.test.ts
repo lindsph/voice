@@ -109,6 +109,16 @@ describe("inferPreferenceHeuristic", () => {
         existingRule: `Prefer "centre" over "center"`,
       }),
     ).toBeNull();
+    expect(
+      inferPreferenceHeuristic({
+        existingRule: 'Avoid: "Wire planters dry out fast." — too salesy for a how-to',
+      })?.rule,
+    ).toBe("too salesy for a how-to");
+    expect(
+      inferPreferenceHeuristic({
+        existingRule: 'Keep this voice: "Hey — random one." — Open like you already know them',
+      })?.rule,
+    ).toBe("Open like you already know them");
   });
 });
 

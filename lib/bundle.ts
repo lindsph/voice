@@ -8,7 +8,7 @@ export function extractCompactToneRules(toneDoc: string): string {
     ["## Who we sound like", "## Voice rules"],
     ["## Voice rules", "### How sentences"],
     ["### How sentences open and flow", "### Warmth"],
-    ["### Warmth", "### Claims"],
+    ["### Warmth", ["### Claims", "## Banned / flagged phrases"]],
     ["### Claims", "## Gold examples"],
     ["## Banned / flagged phrases", "## Publish"],
     ["## Claims posture (summary)", "## Example paragraphs"],
@@ -52,7 +52,7 @@ export function selectGoldExamples(
 }
 
 export function formatGoldExamplesForPrompt(examples: Pick<Gold, "title" | "body">[]): string {
-  if (examples.length === 0) return "(No gold examples yet.)";
+  if (examples.length === 0) return "";
   const blocks = examples.map(
     (example) =>
       `### ${example.title}\n\n${example.body.trim()}\n\n(Use as voice reference — vary openings; do not paraphrase wholesale.)`,
@@ -144,10 +144,21 @@ export function formatToneBundle(input: {
     .join("\n");
 }
 
-function sectionBetween(doc: string, startHeading: string, endHeading: string): string {
+function sectionBetween(
+  doc: string,
+  startHeading: string,
+  endHeading: string | readonly string[],
+): string {
   const start = doc.indexOf(startHeading);
   if (start === -1) return "";
   const from = start + startHeading.length;
-  const end = doc.indexOf(endHeading, from);
-  return end === -1 ? doc.slice(from) : doc.slice(from, end);
+  const ends = typeof endHeading === "string" ? [endHeading] : endHeading;
+  let end = -1;
+  for (const heading of ends) {
+    const at = doc.indexOf(heading, from);
+    if (at !== -1 && (end === -1 || at < end)) end = at;
+  }
+  // A missing end heading is not "the rest of the file".
+  if (end === -1) return "";
+  return doc.slice(from, end);
 }

@@ -32,6 +32,59 @@ describe("tone bundle", () => {
     const rules = extractCompactToneRules(GUIDE);
     expect(rules).toMatch(/Who this sounds like/);
     expect(rules).toMatch(/short hook/);
+    expect(rules).toMatch(/Friendly/);
+    expect(rules).not.toMatch(/Gold examples/);
+  });
+
+  it("stops a WoolGrown warmth slice before banned phrases and gold paragraphs", () => {
+    const rules = extractCompactToneRules(`# WoolGrown
+
+## Who we sound like
+
+A practical Ontario maker.
+
+## Voice rules
+
+### Do / Don't (standing)
+
+Lead with the answer.
+
+### How sentences open and flow
+
+Open with a short hook.
+
+### Warmth and emphasis
+
+At most one exclamation mark.
+
+### Calls to action
+
+Soft CTA once near the end.
+
+## Banned / flagged phrases
+
+- delve
+
+## Publish to Shopify (styling)
+
+Do not embed style=.
+
+## Claims posture (summary)
+
+Hedge pest claims.
+
+## Example paragraphs (gold tone)
+
+### How-to
+
+Wire planters and hanging baskets dry out fast.
+`);
+    expect(rules).toMatch(/At most one exclamation mark/);
+    expect(rules).toMatch(/Soft CTA once/);
+    expect(rules).toMatch(/Hedge pest claims/);
+    expect(rules).not.toMatch(/style=/);
+    expect(rules).not.toMatch(/Wire planters/);
+    expect(rules.match(/delve/g)).toHaveLength(1);
   });
 
   it("prefers surface-matched golds", () => {
@@ -119,6 +172,8 @@ describe("tone bundle", () => {
     expect(bundle).toMatch(/delve/);
     expect(bundle).not.toMatch(/virtual assistant/i);
     expect(bundle).not.toMatch(/pick your brain/i);
+    expect(bundle).not.toMatch(/No gold examples/);
+    expect(bundle).not.toMatch(/Gold examples/);
   });
 
   it("does not put a woolgrown caption rule into a lindsay first note", () => {

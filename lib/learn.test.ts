@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
-import { isQuotedSnippetRule, rejectedFromApprove, rulesFromEdit } from "./learn";
+import { isQuotedSnippetRule, rejectedFromApprove, ruleForPrompt, rulesFromEdit } from "./learn";
 
 describe("isQuotedSnippetRule", () => {
   it("flags the ICL-style quote rules and leaves a real preference", () => {
@@ -11,6 +13,22 @@ describe("isQuotedSnippetRule", () => {
       false,
     );
     expect(isQuotedSnippetRule("Prefer a short hook over a stranger intro.")).toBe(false);
+  });
+
+  it("keeps the dislike note and drops the quoted sentence", () => {
+    expect(
+      ruleForPrompt('Avoid: "Wire planters dry out fast." — too salesy for a how-to'),
+    ).toBe("too salesy for a how-to");
+    expect(ruleForPrompt('Avoid phrasing like: "Hope this finds you well"')).toBeNull();
+    expect(ruleForPrompt('Avoid: "Wire planters dry out fast." — no')).toBeNull();
+    expect(
+      ruleForPrompt('Keep this voice: "Hey — random one." — Open like you already know them'),
+    ).toBe("Open like you already know them");
+    expect(ruleForPrompt('Keep this voice: "Hey — random one."')).toBeNull();
+    expect(
+      ruleForPrompt('Prefer "Find us at The Ex" over "Find us this weekend" — Name the fair and the place'),
+    ).toBe("Name the fair and the place");
+    expect(ruleForPrompt('Prefer "centre" over "center"')).toBeNull();
   });
 });
 
@@ -47,5 +65,13 @@ describe("rulesFromEdit", () => {
       why: "Don’t open like a stranger.",
     });
     expect(rules.some((item) => item.rule.startsWith("Editor note:"))).toBe(true);
+  });
+});
+
+describe("a kept rewrite is a taught sentence", () => {
+  it("stores keepAsGold as non-canonical", () => {
+    const source = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/if \(input\.keepAsGold && after\)/);
+    expect(source).toMatch(/canonical: false/);
   });
 });

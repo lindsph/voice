@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { retrieveGolds, retrieveLearnings } from "./retrieve";
+import { RETRIEVE_TAUGHT_GOLD_K, retrieveGolds, retrieveLearnings } from "./retrieve";
 
 const lindsayNote = {
   id: "tl-note",
@@ -74,6 +74,34 @@ describe("retrieveLearnings", () => {
       k: 1,
     });
     expect(picked[0]?.id).toBe("tl-note");
+  });
+
+  it("retrieves a dislike note and drops the quoted sentence", () => {
+    const avoid = {
+      ...lindsayNote,
+      id: "tl-avoid",
+      rule: 'Avoid: "I would love to pick your brain." — Don’t pitch a listing fix',
+    };
+    const picked = retrieveLearnings([avoid], {
+      profileId: "lindsay",
+      surface: "first_note",
+      query: "listings",
+    });
+    expect(picked.map((item) => item.rule)).toEqual(["Don’t pitch a listing fix"]);
+  });
+
+  it("retrieves a Keep note and drops the quoted sentence", () => {
+    const keep = {
+      ...lindsayNote,
+      id: "tl-keep-note",
+      rule: 'Keep this voice: "Hey — random one." — Open like you already know them',
+    };
+    const picked = retrieveLearnings([keep], {
+      profileId: "lindsay",
+      surface: "first_note",
+      query: "listings",
+    });
+    expect(picked.map((item) => item.rule)).toEqual(["Open like you already know them"]);
   });
 
   it("does not retrieve Keep this voice or Prefer-quote rows", () => {
@@ -205,6 +233,16 @@ describe("retrieveGolds", () => {
           canonical: true,
           status: "active",
         },
+        {
+          id: "loose",
+          profileId: "woolgrown",
+          title: "untyped taught",
+          body: "Spread wool pellets on the bed and water them.",
+          surface: "blog",
+          architecture: "",
+          canonical: false,
+          status: "active",
+        },
       ],
       {
         profileId: "woolgrown",
@@ -214,6 +252,173 @@ describe("retrieveGolds", () => {
         architecture: "how-to-steps",
       },
     );
-    expect(picked.map((item) => item.id)).toEqual(["howto"]);
+    expect(picked.map((item) => item.id)).toEqual(["old", "howto"]);
+  });
+
+  it("uses untyped canonical golds when nothing matches the architecture", () => {
+    const picked = retrieveGolds(
+      [
+        {
+          id: "ex",
+          profileId: "woolgrown",
+          title: "Event",
+          body: "See us at the fair.",
+          surface: "blog",
+          architecture: "proof-story",
+          canonical: false,
+          status: "active",
+        },
+        {
+          id: "old",
+          profileId: "woolgrown",
+          title: "How-to",
+          body: "Wire planters dry out fast.",
+          surface: "blog",
+          architecture: "",
+          canonical: true,
+          status: "active",
+        },
+      ],
+      {
+        profileId: "woolgrown",
+        surface: "blog",
+        query: "how to use wool pellets",
+        seed: "pellets",
+        architecture: "how-to-steps",
+      },
+    );
+    expect(picked.map((item) => item.id)).toEqual(["old"]);
+  });
+
+  it("keeps every canonical gold and adds the three closer taught sentences", () => {
+    const picked = retrieveGolds(
+      [
+        {
+          id: "woolgrown-maker",
+          profileId: "woolgrown",
+          title: "About the maker",
+          body: "Hi! I’m Lindsey, the founder of WoolGrown — a proudly Canadian company turning locally grown wool into natural, biodegradable fabrics and materials for gardening, landscaping and agriculture.",
+          surface: "blog",
+          architecture: "",
+          canonical: true,
+          status: "active",
+        },
+        {
+          id: "woolgrown-howto",
+          profileId: "woolgrown",
+          title: "How-to (Why → What → How)",
+          body: "Wire planters and hanging baskets dry out fast. Lining them with loose wool holds moisture without waterlogging roots.",
+          surface: "blog",
+          architecture: "",
+          canonical: true,
+          status: "active",
+        },
+        {
+          id: "woolgrown-uncertainty",
+          profileId: "woolgrown",
+          title: "Uncertainty",
+          body: "Gardeners often report fewer slug visits on wool mulch or pellets.",
+          surface: "blog",
+          architecture: "",
+          canonical: true,
+          status: "active",
+        },
+        {
+          id: "live-fair",
+          profileId: "woolgrown",
+          title: "Booth note",
+          body: "Come say hello beside the sheep.",
+          surface: "blog",
+          architecture: "",
+          canonical: false,
+          status: "active",
+        },
+        {
+          id: "live-pellets",
+          profileId: "woolgrown",
+          title: "how-to-use-wool-pellets 1",
+          body: "Spread wool pellets, then water them in so the pellets swell.",
+          surface: "blog",
+          architecture: "",
+          canonical: false,
+          status: "active",
+        },
+        {
+          id: "live-water",
+          profileId: "woolgrown",
+          title: "water the wool",
+          body: "Water the wool in after you spread it across the bed.",
+          surface: "blog",
+          architecture: "",
+          canonical: false,
+          status: "active",
+        },
+        {
+          id: "live-garden",
+          profileId: "woolgrown",
+          title: "other bed",
+          body: "A garden bed needs a different mix.",
+          surface: "blog",
+          architecture: "",
+          canonical: false,
+          status: "active",
+        },
+      ],
+      {
+        profileId: "woolgrown",
+        surface: "blog",
+        query: "how-to-use-wool-pellets",
+        seed: "how-to-use-wool-pellets",
+        architecture: "how-to-steps",
+      },
+    );
+    expect(picked.map((item) => item.id)).toEqual([
+      "woolgrown-howto",
+      "woolgrown-maker",
+      "woolgrown-uncertainty",
+      "live-pellets",
+      "live-water",
+      "live-fair",
+    ]);
+    expect(picked.map((item) => item.id)).not.toContain("live-garden");
+    expect(RETRIEVE_TAUGHT_GOLD_K).toBe(3);
+  });
+
+  it("adds three taught sentences when the query is empty", () => {
+    const taught = ["a", "b", "c", "d"].map((id) => ({
+      id,
+      profileId: "woolgrown",
+      title: id,
+      body: `Sentence ${id} about the booth.`,
+      surface: "blog",
+      architecture: "",
+      canonical: false,
+      status: "active" as const,
+    }));
+    const picked = retrieveGolds(
+      [
+        {
+          id: "seed",
+          profileId: "woolgrown",
+          title: "Seed",
+          body: "Hi, I’m Lindsey.",
+          surface: "blog",
+          architecture: "",
+          canonical: true,
+          status: "active",
+        },
+        ...taught,
+      ],
+      {
+        profileId: "woolgrown",
+        surface: "blog",
+        query: "",
+        seed: "empty-query",
+        architecture: "how-to-steps",
+      },
+    );
+    expect(picked[0]?.id).toBe("seed");
+    expect(picked).toHaveLength(1 + RETRIEVE_TAUGHT_GOLD_K);
+    expect(picked).toHaveLength(4);
   });
 });

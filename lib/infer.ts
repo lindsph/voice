@@ -12,7 +12,7 @@
  */
 
 import { completeWithOpenAi, type ChatComplete, unwrapDraft } from "./generate";
-import { isQuotedSnippetRule, type DerivedLearning } from "./learn";
+import { isQuotedSnippetRule, ruleForPrompt, type DerivedLearning } from "./learn";
 
 export { isQuotedSnippetRule } from "./learn";
 
@@ -117,8 +117,9 @@ export function inferPreferenceHeuristic(input: PreferenceInput): DerivedLearnin
   }
 
   const existing = providedRule(input);
-  if (existing && !isQuotedSnippetRule(existing)) {
-    return { ...base, rule: clipRule(existing) };
+  const kept = existing ? ruleForPrompt(existing) : null;
+  if (kept) {
+    return { ...base, rule: clipRule(kept) };
   }
 
   return null;
