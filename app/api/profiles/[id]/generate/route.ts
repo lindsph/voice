@@ -20,11 +20,15 @@ export async function POST(request: Request, { params }: Props) {
       surface: input.surface,
       facts: input.facts,
       seed: input.seed,
+      architecture: input.architecture,
+      format: input.format,
+      model: input.model,
     });
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not generate";
-    const missing = message.includes("OPENAI_API_KEY");
+    const missing =
+      message.includes("OPENAI_API_KEY") || message.includes("ANTHROPIC_API_KEY");
     return NextResponse.json({ error: message }, { status: missing ? 503 : 400 });
   }
 }

@@ -1,3 +1,4 @@
+import { BLOG_SHAPE_INSTRUCTION, blogDraftIssues, blogProse } from "./blog-shape";
 import { formatToneBundle } from "./bundle";
 import { lintDraft } from "./slop";
 import type { Gold, Learning, Profile } from "./types";
@@ -27,11 +28,17 @@ export function buildUserPrompt(input: {
   surfaceId: string;
   facts: string;
   seed: string;
-  golds: Pick<Gold, "id" | "title" | "body" | "surface" | "canonical">[];
+  golds: Array<
+    Pick<Gold, "id" | "title" | "body" | "surface" | "canonical"> &
+      Partial<Pick<Gold, "profileId" | "status" | "architecture">>
+  >;
   learnings: Pick<Learning, "rule" | "status">[];
+  architecture?: string;
+  format?: "blog" | "plain";
   retryContext?: string;
 }): string {
   const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
+  const blogShape = input.format === "blog" || input.surfaceId === "blog";
   return [
     `Write for the “${input.profile.name}” voice.`,
     surface?.hint ?? `Surface: ${input.surfaceId}`,
@@ -48,6 +55,7 @@ export function buildUserPrompt(input: {
       seed: input.seed,
       facts: input.facts,
       profileId: input.profile.id,
+      architecture: input.architecture,
       golds: input.golds,
       learnings: input.learnings,
     }),
@@ -55,7 +63,9 @@ export function buildUserPrompt(input: {
       ? ["", "Previous draft failed a standing rule. Rewrite from scratch and fix:", input.retryContext]
       : []),
     "",
-    "Write the draft only — no title, no quotation marks around the whole thing, no preamble.",
+    input.surfaceId === "blog" || blogShape
+      ? BLOG_SHAPE_INSTRUCTION
+      : "Write the draft only — no title, no quotation marks around the whole thing, no preamble.",
   ].join("\n");
 }
 
@@ -64,15 +74,21 @@ function draftHits(
   input: {
     profile: Profile;
     surfaceId: string;
+    format?: "blog" | "plain";
   },
 ): string[] {
   const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
-  return lintDraft({
-    body,
-    banned: input.profile.bannedForPrompt,
-    surfaceId: input.surfaceId,
-    maxWords: surface?.maxWords,
-  });
+  const blogShape = input.format === "blog" || input.surfaceId === "blog";
+  const prose = blogShape ? blogProse(body) : body;
+  return [
+    ...(blogShape ? blogDraftIssues(body) : []),
+    ...lintDraft({
+      body: prose,
+      banned: input.profile.bannedForPrompt,
+      surfaceId: input.surfaceId,
+      maxWords: surface?.maxWords,
+    }),
+  ];
 }
 
 export async function generateDraft(
@@ -81,8 +97,13 @@ export async function generateDraft(
     surfaceId: string;
     facts: string;
     seed: string;
-    golds: Pick<Gold, "id" | "title" | "body" | "surface" | "canonical">[];
+    golds: Array<
+    Pick<Gold, "id" | "title" | "body" | "surface" | "canonical"> &
+      Partial<Pick<Gold, "profileId" | "status" | "architecture">>
+  >;
     learnings: Pick<Learning, "rule" | "status">[];
+    architecture?: string;
+    format?: "blog" | "plain";
   },
   complete: ChatComplete,
 ): Promise<{ body: string; bundle: string; retried: boolean; warnings: string[] }> {
@@ -110,10 +131,72 @@ export async function generateDraft(
   };
 }
 
+export function isClaudeModel(model: string | undefined): boolean {
+  return (model ?? "").trim().toLowerCase().startsWith("claude-");
+}
+
+export async function completeWithAnthropic(input: {
+  system: string;
+  user: string;
+  model: string;
+  temperature?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("Add ANTHROPIC_API_KEY to Voice’s .env.");
+  }
+  const response = await (input.fetchImpl ?? fetch)("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: input.model,
+      max_tokens: 8192,
+      temperature: input.temperature ?? DRAFT_TEMPERATURE,
+      system: input.system,
+      messages: [{ role: "user", content: input.user }],
+    }),
+    signal: AbortSignal.timeout(DRAFT_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 240);
+    throw new Error(`Claude draft failed (${response.status}): ${detail}`);
+  }
+  const json = (await response.json()) as {
+    content?: Array<{ type?: string; text?: string }>;
+  };
+  const text = (json.content ?? [])
+    .filter((part) => part.type === "text" && part.text)
+    .map((part) => part.text!.trim())
+    .join("\n")
+    .trim();
+  if (!text) throw new Error("The model returned an empty draft.");
+  return text;
+}
+
+export async function completeDraft(input: {
+  system: string;
+  user: string;
+  temperature?: number;
+  model?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<string> {
+  const model = input.model?.trim() || DRAFT_MODEL;
+  if (isClaudeModel(model)) {
+    return completeWithAnthropic({ ...input, model });
+  }
+  return completeWithOpenAi({ ...input, model });
+}
+
 export async function completeWithOpenAi(input: {
   system: string;
   user: string;
   temperature?: number;
+  model?: string;
 }): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
@@ -123,8 +206,9 @@ export async function completeWithOpenAi(input: {
   const client = new OpenAI({ apiKey });
   const completion = await client.chat.completions.create(
     {
-      model: DRAFT_MODEL,
+      model: input.model?.trim() || DRAFT_MODEL,
       temperature: input.temperature ?? DRAFT_TEMPERATURE,
+      store: false,
       messages: [
         { role: "system", content: input.system },
         { role: "user", content: input.user },

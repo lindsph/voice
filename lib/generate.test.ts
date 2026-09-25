@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { generateDraft } from "./generate";
+import {
+  completeDraft,
+  completeWithAnthropic,
+  generateDraft,
+  isClaudeModel,
+} from "./generate";
 import type { Profile } from "./types";
 
 const lindsay: Profile = {
@@ -95,5 +100,163 @@ describe("generateDraft slop retry", () => {
     expect(retryContext).toMatch(/guaranteed/i);
     expect(retryContext).not.toMatch(/virtual assistant/i);
     expect(result.warnings).toEqual([]);
+  });
+
+  it("keeps untyped canonical golds and drops a different architecture", async () => {
+    let user = "";
+    await generateDraft(
+      {
+        ...draftInput(
+          {
+            ...woolgrown,
+            surfaces: [
+              ...woolgrown.surfaces,
+              {
+                id: "blog",
+                label: "Blog",
+                maxWords: null,
+                hint: "Shop blog.",
+              },
+            ],
+          },
+          "blog",
+        ),
+        architecture: "how-to-steps",
+        golds: [
+          {
+            id: "old",
+            profileId: "woolgrown",
+            title: "Founder",
+            body: "Canadian sheep wool, made for gardens.",
+            surface: "blog",
+            architecture: "",
+            canonical: true,
+            status: "active",
+          },
+          {
+            id: "ex",
+            profileId: "woolgrown",
+            title: "Event",
+            body: "See you at the booth this weekend.",
+            surface: "blog",
+            architecture: "proof-story",
+            canonical: false,
+            status: "active",
+          },
+        ],
+      },
+      async ({ user: prompt }) => {
+        user = prompt;
+        return "Mix the pellets into the bed and water them in.";
+      },
+    );
+    expect(user).toContain("Canadian sheep wool, made for gardens.");
+    expect(user).not.toContain("booth this weekend");
+  });
+
+  it("asks a blog for lead, sections, faq, and one cta as JSON", async () => {
+    let user = "";
+    await generateDraft(
+      {
+        ...draftInput(
+          {
+            ...woolgrown,
+            surfaces: [
+              ...woolgrown.surfaces,
+              {
+                id: "blog",
+                label: "Blog",
+                maxWords: null,
+                hint: "Shop blog.",
+              },
+            ],
+          },
+          "blog",
+        ),
+        facts: "Allowed citation ids: woolgrown-founder-brief.",
+      },
+      async ({ user: prompt }) => {
+        user = prompt;
+        return JSON.stringify({
+          lead: "Wool pellets hold moisture in the pot. Water them in and let them work through the season.",
+          sections: [
+            { heading: "Mix", body: "Mix the pellets into the top of the bed, then water." },
+            { heading: "Wait", body: "Let the wool work through the season without extra feed." },
+          ],
+          faq: [
+            { question: "How much?", answer: "About half a cup in a small pot." },
+            { question: "How often?", answer: "Once at planting is enough for the season." },
+            { question: "Safe?", answer: "They are a garden input, not a snack." },
+          ],
+          cta: "WoolGrown pellets are on the shop when you are ready to try a bed.",
+        });
+      },
+    );
+    expect(user).toContain("lead");
+    expect(user).toContain("sections");
+    expect(user).toContain("one soft close");
+    expect(user).not.toContain("Write the draft only");
+  });
+});
+
+describe("model routing", () => {
+  it("treats claude model ids as Claude and everything else as OpenAI", () => {
+    expect(isClaudeModel("claude-opus-4-6")).toBe(true);
+    expect(isClaudeModel(" Claude-Sonnet-4-6 ")).toBe(true);
+    expect(isClaudeModel("gpt-4o")).toBe(false);
+    expect(isClaudeModel(undefined)).toBe(false);
+  });
+
+  it("sends a Claude model to Anthropic with the Voice system and user text", async () => {
+    const prev = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        model: string;
+        system: string;
+        messages: Array<{ content: string }>;
+      };
+      expect(body.model).toBe("claude-opus-4-6");
+      expect(body.system).toBe("Write like WoolGrown.");
+      expect(body.messages[0]?.content).toContain("wool pellets");
+      return new Response(
+        JSON.stringify({
+          content: [{ type: "text", text: "Mix the pellets into the bed and water them in." }],
+        }),
+        { status: 200 },
+      );
+    };
+    try {
+      const text = await completeDraft({
+        system: "Write like WoolGrown.",
+        user: "Facts: wool pellets.",
+        model: "claude-opus-4-6",
+        fetchImpl: fetchImpl as typeof fetch,
+      });
+      expect(text).toMatch(/Mix the pellets/);
+    } finally {
+      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = prev;
+    }
+  });
+
+  it("refuses a Claude draft when Voice has no Anthropic key", async () => {
+    const prev = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      await expect(
+        completeWithAnthropic({
+          system: "Write like WoolGrown.",
+          user: "Facts.",
+          model: "claude-opus-4-6",
+          fetchImpl: (async () => {
+            throw new Error("should not fetch");
+          }) as typeof fetch,
+        }),
+      ).rejects.toThrow(/ANTHROPIC_API_KEY/);
+    } finally {
+      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = prev;
+    }
   });
 });

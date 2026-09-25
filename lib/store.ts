@@ -1,6 +1,6 @@
 import { prisma } from "./db";
 import { formatToneBundle } from "./bundle";
-import { completeWithOpenAi, generateDraft } from "./generate";
+import { completeDraft, generateDraft } from "./generate";
 import { inferPreference } from "./infer";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
 import type { Gold, Learning, Profile, Surface } from "./types";
@@ -167,12 +167,16 @@ export async function generateForProfile(input: {
   surface: string;
   facts: string;
   seed?: string;
+  architecture?: string;
+  format?: "blog" | "plain";
+  model?: string;
 }): Promise<{ body: string; retried: boolean; bundle: string; warnings: string[] }> {
   const corpus = await getBundle({
     profileId: input.profileId,
     surface: input.surface,
     seed: input.seed,
     facts: input.facts,
+    architecture: input.architecture,
   });
   return generateDraft(
     {
@@ -182,8 +186,10 @@ export async function generateForProfile(input: {
       seed: input.seed ?? input.surface,
       golds: corpus.golds,
       learnings: corpus.learnings,
+      architecture: input.architecture,
+      format: input.format,
     },
-    completeWithOpenAi,
+    (prompt) => completeDraft({ ...prompt, model: input.model }),
   );
 }
 

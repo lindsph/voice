@@ -114,7 +114,7 @@ function woolgrownSurfaces() {
       id: "blog",
       label: "Blog",
       maxWords: null,
-      hint: "Shop blog draft. Answer first. Soft CTA once near the end. No Comment/DM language.",
+      hint: "Shop blog draft. Lead, then sections, then a short FAQ, then one soft CTA. No Comment/DM language.",
     },
     {
       id: "shop_faq",

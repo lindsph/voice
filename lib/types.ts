@@ -58,6 +58,9 @@ export const generateInputSchema = z.object({
   surface: z.string().min(1),
   facts: z.string().min(1),
   seed: z.string().optional(),
+  architecture: z.string().optional(),
+  format: z.enum(["blog", "plain"]).optional(),
+  model: z.string().optional(),
 });
 
 export const learnInputSchema = z.object({
