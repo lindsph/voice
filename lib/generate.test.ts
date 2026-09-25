@@ -4,7 +4,10 @@ import {
   completeDraft,
   completeWithAnthropic,
   generateDraft,
+  anthropicDraftBody,
+  claudeOmitsSampling,
   isClaudeModel,
+  unwrapDraft,
 } from "./generate";
 import type { Profile } from "./types";
 
@@ -199,12 +202,44 @@ describe("generateDraft slop retry", () => {
   });
 });
 
+describe("unwrapDraft", () => {
+  it("strips a json fence and a bare json label before the object", () => {
+    expect(unwrapDraft('```json { "a": 1 }\n```')).toBe('{ "a": 1 }');
+    expect(unwrapDraft('```json\n{"a":1}\n```')).toBe('{"a":1}');
+    expect(unwrapDraft('json {"a":1}')).toBe('{"a":1}');
+    expect(unwrapDraft("```markdown\nhello\n```")).toBe("hello");
+  });
+});
+
 describe("model routing", () => {
   it("treats claude model ids as Claude and everything else as OpenAI", () => {
     expect(isClaudeModel("claude-opus-4-6")).toBe(true);
     expect(isClaudeModel(" Claude-Sonnet-4-6 ")).toBe(true);
     expect(isClaudeModel("gpt-4o")).toBe(false);
     expect(isClaudeModel(undefined)).toBe(false);
+    expect(claudeOmitsSampling("claude-opus-5-5")).toBe(true);
+    expect(claudeOmitsSampling("claude-opus-4-6")).toBe(false);
+  });
+
+  it("omits temperature on Opus 5.5 and keeps it on Opus 4.6", () => {
+    const newer = anthropicDraftBody({
+      system: "Write like WoolGrown.",
+      user: "Facts.",
+      model: "claude-opus-5-5",
+      temperature: 0.45,
+    });
+    expect(newer.temperature).toBeUndefined();
+    expect(newer.max_tokens).toBe(16000);
+    expect(newer.output_config).toEqual({ effort: "medium" });
+
+    const current = anthropicDraftBody({
+      system: "Write like WoolGrown.",
+      user: "Facts.",
+      model: "claude-opus-4-6",
+    });
+    expect(current.temperature).toBe(0.45);
+    expect(current.max_tokens).toBe(8192);
+    expect(current.output_config).toBeUndefined();
   });
 
   it("sends a Claude model to Anthropic with the Voice system and user text", async () => {

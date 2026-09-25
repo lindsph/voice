@@ -13,7 +13,9 @@ export type ChatComplete = (input: { system: string; user: string }) => Promise<
 
 export function unwrapDraft(text: string): string {
   let body = text.trim();
-  body = body.replace(/^```(?:text|markdown)?\n?/, "").replace(/\n?```$/, "").trim();
+  // Opus 5.5 often opens with ```json even when told not to fence.
+  body = body.replace(/^```[a-zA-Z0-9_-]*\s*/, "").replace(/\s*```$/, "").trim();
+  body = body.replace(/^json(?=\s*[{[])/i, "").trim();
   if (
     (body.startsWith('"') && body.endsWith('"')) ||
     (body.startsWith("“") && body.endsWith("”"))
@@ -135,6 +137,11 @@ export function isClaudeModel(model: string | undefined): boolean {
   return (model ?? "").trim().toLowerCase().startsWith("claude-");
 }
 
+/** Opus 5.5 rejects any temperature other than the default. Thinking stays on. */
+export function claudeOmitsSampling(model: string): boolean {
+  return model.trim().toLowerCase() === "claude-opus-5-5";
+}
+
 export async function completeWithAnthropic(input: {
   system: string;
   user: string;
@@ -153,13 +160,7 @@ export async function completeWithAnthropic(input: {
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
     },
-    body: JSON.stringify({
-      model: input.model,
-      max_tokens: 8192,
-      temperature: input.temperature ?? DRAFT_TEMPERATURE,
-      system: input.system,
-      messages: [{ role: "user", content: input.user }],
-    }),
+    body: JSON.stringify(anthropicDraftBody(input)),
     signal: AbortSignal.timeout(DRAFT_TIMEOUT_MS),
   });
   if (!response.ok) {
@@ -176,6 +177,27 @@ export async function completeWithAnthropic(input: {
     .trim();
   if (!text) throw new Error("The model returned an empty draft.");
   return text;
+}
+
+export function anthropicDraftBody(input: {
+  system: string;
+  user: string;
+  model: string;
+  temperature?: number;
+}): Record<string, unknown> {
+  const model = input.model.trim();
+  const body: Record<string, unknown> = {
+    model,
+    max_tokens: claudeOmitsSampling(model) ? 16000 : 8192,
+    system: input.system,
+    messages: [{ role: "user", content: input.user }],
+  };
+  if (claudeOmitsSampling(model)) {
+    body.output_config = { effort: "medium" };
+  } else {
+    body.temperature = input.temperature ?? DRAFT_TEMPERATURE;
+  }
+  return body;
 }
 
 export async function completeDraft(input: {
