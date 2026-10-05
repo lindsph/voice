@@ -1,3 +1,5 @@
+import type { DraftTrace } from "./types";
+
 export type VoiceClient = {
   url: string;
   key?: string;
@@ -14,6 +16,7 @@ export type VoiceDraft = {
   body: string;
   retried: boolean;
   warnings?: string[];
+  trace?: DraftTrace;
 };
 
 export type VoiceLearnResult = {

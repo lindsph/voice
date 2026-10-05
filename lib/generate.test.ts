@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   completeDraft,
   completeWithAnthropic,
+  DRAFT_MODEL,
+  formatRetryReason,
   generateDraft,
   anthropicDraftBody,
   claudeOmitsSampling,
@@ -65,6 +67,9 @@ describe("generateDraft slop retry", () => {
     });
     expect(result.retried).toBe(false);
     expect(result.warnings).toEqual([]);
+    expect(result.trace.retryReason).toBeUndefined();
+    expect(result.trace.profileId).toBe("lindsay");
+    expect(result.trace.surfaceId).toBe("first_note");
   });
 
   it("retries once when the first draft uses stock slop", async () => {
@@ -88,6 +93,7 @@ describe("generateDraft slop retry", () => {
     expect(result.retried).toBe(true);
     expect(result.warnings).toContain("delve");
     expect(result.body).toMatch(/delve/);
+    expect(result.trace.retryReason).toBe("banned_phrase:delve");
   });
 
   it("retries woolgrown mouth bans without using lindsay identity bans", async () => {
@@ -199,6 +205,175 @@ describe("generateDraft slop retry", () => {
     expect(user).toContain("sections");
     expect(user).toContain("one soft close");
     expect(user).not.toContain("Write the draft only");
+  });
+
+  it("records the context that influenced the draft", async () => {
+    let calls = 0;
+    const facts = "Raised beds at the booth.";
+    const result = await generateDraft(
+      {
+        ...draftInput(woolgrown, "social"),
+        facts,
+        seed: "raised-beds",
+        architecture: "how-to-steps",
+        model: "claude-opus-4-6",
+        golds: [
+          {
+            id: "woolgrown-howto",
+            profileId: "woolgrown",
+            title: "How to",
+            body: "Mix the pellets into the raised bed, then water.",
+            surface: "social",
+            architecture: "how-to-steps",
+            canonical: true,
+            status: "active",
+          },
+          {
+            id: "woolgrown-uncertainty",
+            profileId: "woolgrown",
+            title: "Uncertainty",
+            body: "Gardeners often report fewer slug visits. Studies are still thin.",
+            surface: "social",
+            architecture: "",
+            canonical: true,
+            status: "active",
+          },
+          {
+            id: "other-arch",
+            profileId: "woolgrown",
+            title: "Proof",
+            body: "See you at the booth this weekend.",
+            surface: "social",
+            architecture: "proof-story",
+            canonical: false,
+            status: "active",
+          },
+        ],
+        learnings: [
+          {
+            id: "tl-123",
+            profileId: "woolgrown",
+            rule: "Name the fair and the place.",
+            status: "active",
+            surface: "social",
+          },
+          {
+            id: "tl-other",
+            profileId: "woolgrown",
+            rule: "Do not use this on a note.",
+            status: "active",
+            surface: "first_note",
+          },
+        ],
+      },
+      async () => {
+        calls += 1;
+        return calls === 1
+          ? "This guaranteed mulch will transform your beds."
+          : "Wool in the booth at the CNE this week.";
+      },
+    );
+    expect(result.retried).toBe(true);
+    expect(result.warnings).toEqual([]);
+    expect(result.trace).toMatchObject({
+      profileId: "woolgrown",
+      surfaceId: "social",
+      model: "claude-opus-4-6",
+      factsCharacterCount: facts.length,
+      seed: "raised-beds",
+      architecture: "how-to-steps",
+      retryReason: "banned_phrase:guaranteed",
+      selectedLearningIds: ["tl-123"],
+    });
+    expect(result.trace.selectedGoldIds).toEqual(
+      expect.arrayContaining(["woolgrown-howto", "woolgrown-uncertainty"]),
+    );
+    expect(result.trace.selectedGoldIds).not.toContain("other-arch");
+    expect(result.trace.bannedPhrasesChecked).toEqual(
+      expect.arrayContaining(["guaranteed", "delve"]),
+    );
+    expect(result.trace.selectedGolds.find((gold) => gold.id === "woolgrown-howto")?.reason).toMatch(
+      /Canonical example/,
+    );
+    expect(result.trace.selectedLearnings[0]?.reason).toMatch(/Same surface/);
+    expect(result.bundle).toContain("How to");
+    expect(result.bundle).not.toContain("booth this weekend");
+  });
+
+  it("counts trimmed facts and leaves architecture off when it was not asked", async () => {
+    const result = await generateDraft(
+      {
+        ...draftInput(lindsay, "first_note"),
+        facts: "  CNE.  ",
+        model: "  gpt-4o  ",
+      },
+      async () => "Hey — noticed the listing. Happy to look if useful.",
+    );
+    expect(result.trace.factsCharacterCount).toBe(4);
+    expect(result.trace.model).toBe("gpt-4o");
+    expect(result.trace.architecture).toBeUndefined();
+    expect(result.trace.seed).toBe("first_note");
+    expect(result.trace.selectedGoldIds).toEqual([]);
+    expect(result.trace.selectedLearningIds).toEqual([]);
+  });
+
+  it("uses the default draft model when none is passed", async () => {
+    const result = await generateDraft(draftInput(lindsay, "first_note"), async () => {
+      return "Hey — noticed the listing. Happy to look if useful.";
+    });
+    expect(result.trace.model).toBe(DRAFT_MODEL);
+  });
+
+  it("keeps a blog shape miss as the retry reason", async () => {
+    let calls = 0;
+    const result = await generateDraft(
+      { ...draftInput(woolgrown, "blog"), format: "blog" },
+      async () => {
+        calls += 1;
+        if (calls === 1) return "not json";
+        return JSON.stringify({
+          lead: "Wool pellets hold moisture in the pot. Water them in and let them work through the season.",
+          sections: [
+            { heading: "Mix", body: "Mix the pellets into the top of the bed, then water." },
+            { heading: "Wait", body: "Let the wool work through the season without extra feed." },
+          ],
+          faq: [
+            { question: "How much?", answer: "About half a cup in a small pot." },
+            { question: "How often?", answer: "Once at planting is enough for the season." },
+            { question: "Safe?", answer: "They are a garden input, not a snack." },
+          ],
+          cta: "WoolGrown pellets are on the shop when you are ready to try a bed.",
+        });
+      },
+    );
+    expect(result.retried).toBe(true);
+    expect(result.warnings).toEqual([]);
+    expect(result.trace.retryReason).toMatch(/Blog draft must be one JSON object/);
+    expect(result.trace.retryReason).not.toMatch(/banned_phrase/);
+  });
+
+  it("names each first-pass ban when the retry is still sloppy", async () => {
+    const result = await generateDraft(draftInput(woolgrown, "social"), async () => {
+      return "This guaranteed mulch will delve into your beds.";
+    });
+    expect(result.retried).toBe(true);
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.trace.retryReason).toContain("banned_phrase:guaranteed");
+    expect(result.trace.retryReason).toContain("banned_phrase:delve");
+  });
+});
+
+describe("formatRetryReason", () => {
+  it("labels a short ban and leaves shape failures as written", () => {
+    expect(
+      formatRetryReason([
+        "guaranteed / guarantee",
+        "it's not X, it's Y (2 times)",
+        "lead must be an answer-first paragraph",
+      ]),
+    ).toBe(
+      "banned_phrase:guaranteed; it's not X, it's Y (2 times); lead must be an answer-first paragraph",
+    );
   });
 });
 

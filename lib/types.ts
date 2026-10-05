@@ -54,6 +54,34 @@ export const profileSchema = z.object({
 
 export type Profile = z.infer<typeof profileSchema>;
 
+export type DraftTraceGold = {
+  id: string;
+  title: string;
+  reason: string;
+};
+
+export type DraftTraceLearning = {
+  id: string;
+  rule: string;
+  reason: string;
+};
+
+/** Compact record of what a generate call actually used. IDs and counts, not the prompt. */
+export type DraftTrace = {
+  profileId: string;
+  surfaceId: string;
+  model: string;
+  factsCharacterCount: number;
+  selectedGoldIds: string[];
+  selectedLearningIds: string[];
+  bannedPhrasesChecked: string[];
+  seed: string;
+  architecture?: string;
+  retryReason?: string;
+  selectedGolds: DraftTraceGold[];
+  selectedLearnings: DraftTraceLearning[];
+};
+
 export const generateInputSchema = z.object({
   surface: z.string().min(1),
   facts: z.string().min(1),

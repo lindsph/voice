@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extractCompactToneRules, formatToneBundle, selectGoldExamples } from "./bundle";
+import { collectToneSelection, extractCompactToneRules, formatToneBundle, selectGoldExamples } from "./bundle";
 
 const GUIDE = `# Lindsay
 
@@ -268,5 +268,179 @@ Wire planters and hanging baskets dry out fast.
     expect(bundle).not.toMatch(/Keep this voice/);
     expect(bundle).not.toMatch(/Hey Charise — random one/);
     expect(bundle).toMatch(/Don’t introduce yourself/);
+  });
+
+  it("says why an untyped gold was used when the post type has no match", () => {
+    const selection = collectToneSelection({
+      guide: GUIDE,
+      bannedForPrompt: ["guaranteed / guarantee"],
+      profileId: "woolgrown",
+      surface: undefined,
+      surfaceId: "blog",
+      seed: "raised-beds",
+      facts: "Wool pellets in a raised bed.",
+      architecture: "how-to-steps",
+      golds: [
+        {
+          id: "untyped",
+          profileId: "woolgrown",
+          title: "Untyped",
+          body: "Spread the pellets, then water.",
+          surface: "blog",
+          architecture: "",
+          canonical: false,
+          status: "active",
+        },
+      ],
+      learnings: [],
+    });
+    expect(selection.golds.map((gold) => gold.id)).toEqual(["untyped"]);
+    expect(selection.golds[0]?.reason).toMatch(/No example for this post type/);
+    expect(selection.bannedPhrasesChecked).toContain("guaranteed");
+  });
+
+  it("explains each way a gold or learning gets into the draft", () => {
+    const gold = (
+      over: Partial<{
+        id: string;
+        profileId: string;
+        title: string;
+        architecture: string;
+        canonical: boolean;
+        status: "active" | "dismissed";
+      }> = {},
+    ) => ({
+      id: "g",
+      profileId: "woolgrown",
+      title: "How to",
+      body: "Spread the pellets, then water.",
+      surface: "blog",
+      architecture: "",
+      canonical: false,
+      status: "active" as const,
+      ...over,
+    });
+    const base = {
+      guide: GUIDE,
+      bannedForPrompt: [] as string[],
+      profileId: "woolgrown",
+      surface: undefined,
+      surfaceId: "blog",
+      learnings: [] as [],
+    };
+
+    expect(
+      collectToneSelection({
+        ...base,
+        seed: "beds",
+        facts: "raised bed",
+        golds: [gold({ canonical: true })],
+      }).golds[0]?.reason,
+    ).toBe("Canonical example for this surface.");
+
+    expect(
+      collectToneSelection({
+        ...base,
+        seed: "beds",
+        facts: "raised bed",
+        architecture: "how-to-steps",
+        golds: [gold({ architecture: "how-to-steps" })],
+      }).golds[0]?.reason,
+    ).toBe("Taught example for this post type, closest to these facts.");
+
+    expect(
+      collectToneSelection({
+        ...base,
+        seed: "",
+        architecture: "how-to-steps",
+        golds: [gold({ architecture: "how-to-steps" })],
+      }).golds[0]?.reason,
+    ).toBe("Taught example for this post type.");
+
+    expect(
+      collectToneSelection({
+        ...base,
+        seed: "beds",
+        facts: "raised bed",
+        golds: [gold()],
+      }).golds[0]?.reason,
+    ).toBe("Taught example, closest to these facts.");
+
+    expect(
+      collectToneSelection({
+        ...base,
+        seed: "",
+        golds: [gold()],
+      }).golds[0]?.reason,
+    ).toBe("Taught example rotated in for this seed.");
+
+    const mixed = collectToneSelection({
+      ...base,
+      seed: "beds",
+      facts: "raised bed",
+      golds: [
+        gold({ id: "live", canonical: true }),
+        gold({ id: "gone", status: "dismissed", canonical: true }),
+        gold({ id: "other-mouth", profileId: "lindsay", canonical: true }),
+      ],
+      learnings: [
+        {
+          id: "tl-blog",
+          profileId: "woolgrown",
+          rule: "Name the bed.",
+          status: "active",
+          surface: "blog",
+        },
+        {
+          id: "tl-off",
+          profileId: "woolgrown",
+          rule: "Stay on the note.",
+          status: "active",
+          surface: "first_note",
+        },
+        {
+          id: "tl-dead",
+          profileId: "woolgrown",
+          rule: "Old rule.",
+          status: "dismissed",
+          surface: "blog",
+        },
+        {
+          id: "tl-lindsay",
+          profileId: "lindsay",
+          rule: "Don’t introduce yourself.",
+          status: "active",
+          surface: "blog",
+        },
+      ],
+    });
+    expect(mixed.golds.map((item) => item.id)).toEqual(["live"]);
+    expect(mixed.learnings.map((item) => item.id)).toEqual(["tl-blog"]);
+    expect(mixed.learnings[0]?.reason).toBe("Same surface, closest to these facts.");
+
+    const quiet = collectToneSelection({
+      ...base,
+      seed: "",
+      learnings: [
+        {
+          id: "tl-blog",
+          profileId: "woolgrown",
+          rule: "Name the bed.",
+          status: "active",
+          surface: "blog",
+        },
+      ],
+      golds: [],
+    });
+    expect(quiet.learnings[0]?.reason).toBe("Same surface.");
+
+    const bundle = formatToneBundle({
+      ...base,
+      seed: "beds",
+      facts: "raised bed",
+      golds: [gold({ id: "live", title: "Kept how-to", canonical: true })],
+    });
+    expect(bundle).toContain("Kept how-to");
+    expect(bundle).not.toContain("booth this weekend");
   });
 });

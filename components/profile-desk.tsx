@@ -5,7 +5,8 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import type { Gold, Learning, Profile } from "@/lib/types";
+import { DraftTracePanel } from "@/components/draft-trace";
+import type { DraftTrace, Gold, Learning, Profile } from "@/lib/types";
 
 type Props = {
   profile: Profile;
@@ -23,6 +24,8 @@ export function ProfileDesk({ profile, golds, learnings }: Props) {
   const [keepAsGold, setKeepAsGold] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
+  const [trace, setTrace] = useState<DraftTrace | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   async function draftThis() {
     setNotice(null);
@@ -37,6 +40,7 @@ export function ProfileDesk({ profile, golds, learnings }: Props) {
         body?: string;
         error?: string;
         warnings?: string[];
+        trace?: DraftTrace;
       };
       if (!response.ok || !payload.body) {
         setNotice(payload.error ?? "Could not draft.");
@@ -44,6 +48,8 @@ export function ProfileDesk({ profile, golds, learnings }: Props) {
       }
       setBody(payload.body);
       setBaseline(payload.body);
+      setTrace(payload.trace ?? null);
+      setWarnings(payload.warnings ?? []);
       if (payload.warnings && payload.warnings.length > 0) {
         setNotice(
           `Drafted. Still a slop tell after one retry: ${payload.warnings.join("; ")}. Edit it, then teach.`,
@@ -126,6 +132,7 @@ export function ProfileDesk({ profile, golds, learnings }: Props) {
           Draft
           <textarea value={body} onChange={(event) => setBody(event.target.value)} />
         </label>
+        {trace ? <DraftTracePanel trace={trace} profile={profile} warnings={warnings} /> : null}
         <label>
           Why this version is better
           <input

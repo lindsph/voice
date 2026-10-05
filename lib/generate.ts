@@ -1,7 +1,7 @@
 import { BLOG_SHAPE_INSTRUCTION, blogDraftIssues, blogProse } from "./blog-shape";
-import { formatToneBundle } from "./bundle";
+import { collectToneSelection, formatToneBundle, type ToneBundleInput } from "./bundle";
 import { lintDraft } from "./slop";
-import type { Gold, Learning, Profile } from "./types";
+import type { DraftTrace, Profile } from "./types";
 
 export { bannedHits } from "./slop";
 
@@ -30,11 +30,8 @@ export function buildUserPrompt(input: {
   surfaceId: string;
   facts: string;
   seed: string;
-  golds: Array<
-    Pick<Gold, "id" | "title" | "body" | "surface" | "canonical"> &
-      Partial<Pick<Gold, "profileId" | "status" | "architecture">>
-  >;
-  learnings: Pick<Learning, "rule" | "status">[];
+  golds: ToneBundleInput["golds"];
+  learnings: ToneBundleInput["learnings"];
   architecture?: string;
   format?: "blog" | "plain";
   retryContext?: string;
@@ -93,27 +90,80 @@ function draftHits(
   ];
 }
 
+export function formatRetryReason(hits: string[]): string {
+  return hits
+    .map((hit) => {
+      const token = (hit.split("/")[0] ?? hit).trim();
+      if (token.length > 0 && token.length < 48 && !token.includes("(") && !/\bmust\b/i.test(token)) {
+        return `banned_phrase:${token.toLowerCase()}`;
+      }
+      return hit;
+    })
+    .join("; ");
+}
+
+function draftTrace(
+  input: {
+    profile: Profile;
+    surfaceId: string;
+    facts: string;
+    seed: string;
+    golds: ToneBundleInput["golds"];
+    learnings: ToneBundleInput["learnings"];
+    architecture?: string;
+    model?: string;
+  },
+  retryHits: string[] | null,
+): DraftTrace {
+  const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
+  const selection = collectToneSelection({
+    guide: input.profile.guide,
+    bannedForPrompt: input.profile.bannedForPrompt,
+    surface,
+    surfaceId: input.surfaceId,
+    seed: input.seed,
+    facts: input.facts,
+    profileId: input.profile.id,
+    architecture: input.architecture,
+    golds: input.golds,
+    learnings: input.learnings,
+  });
+  const architecture = input.architecture?.trim();
+  return {
+    profileId: input.profile.id,
+    surfaceId: input.surfaceId,
+    model: input.model?.trim() || DRAFT_MODEL,
+    factsCharacterCount: input.facts.trim().length,
+    selectedGoldIds: selection.golds.map((item) => item.id),
+    selectedLearningIds: selection.learnings.map((item) => item.id),
+    bannedPhrasesChecked: selection.bannedPhrasesChecked,
+    seed: input.seed,
+    ...(architecture ? { architecture } : {}),
+    ...(retryHits && retryHits.length > 0 ? { retryReason: formatRetryReason(retryHits) } : {}),
+    selectedGolds: selection.golds.map(({ id, title, reason }) => ({ id, title, reason })),
+    selectedLearnings: selection.learnings.map(({ id, rule, reason }) => ({ id, rule, reason })),
+  };
+}
+
 export async function generateDraft(
   input: {
     profile: Profile;
     surfaceId: string;
     facts: string;
     seed: string;
-    golds: Array<
-    Pick<Gold, "id" | "title" | "body" | "surface" | "canonical"> &
-      Partial<Pick<Gold, "profileId" | "status" | "architecture">>
-  >;
-    learnings: Pick<Learning, "rule" | "status">[];
+    golds: ToneBundleInput["golds"];
+    learnings: ToneBundleInput["learnings"];
     architecture?: string;
     format?: "blog" | "plain";
+    model?: string;
   },
   complete: ChatComplete,
-): Promise<{ body: string; bundle: string; retried: boolean; warnings: string[] }> {
+): Promise<{ body: string; bundle: string; retried: boolean; warnings: string[]; trace: DraftTrace }> {
   const user = buildUserPrompt(input);
   const first = unwrapDraft(await complete({ system: input.profile.systemPrompt, user }));
   const hits = draftHits(first, input);
   if (hits.length === 0) {
-    return { body: first, bundle: user, retried: false, warnings: [] };
+    return { body: first, bundle: user, retried: false, warnings: [], trace: draftTrace(input, null) };
   }
   const second = unwrapDraft(
     await complete({
@@ -130,6 +180,7 @@ export async function generateDraft(
     bundle: user,
     retried: true,
     warnings: draftHits(body, input),
+    trace: draftTrace(input, hits),
   };
 }
 

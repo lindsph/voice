@@ -1,5 +1,5 @@
 import { retrieveGolds, retrieveLearnings } from "./retrieve";
-import { SHARED_SLOP_PROMPT } from "./slop";
+import { bannedPhrasesChecked, SHARED_SLOP_PROMPT } from "./slop";
 import type { Gold, Learning, Surface } from "./types";
 
 export function extractCompactToneRules(toneDoc: string): string {
@@ -72,7 +72,7 @@ export function formatLearningsForPrompt(learnings: Pick<Learning, "rule" | "sta
   ].join("\n");
 }
 
-export function formatToneBundle(input: {
+export type ToneBundleInput = {
   guide: string;
   bannedForPrompt: string[];
   surface: Surface | undefined;
@@ -89,17 +89,43 @@ export function formatToneBundle(input: {
     Pick<Learning, "rule" | "status"> &
       Partial<Pick<Learning, "id" | "profileId" | "surface" | "before" | "after" | "why" | "createdAt">>
   >;
-}): string {
+};
+
+export type SelectedGold = Pick<Gold, "id" | "title" | "body"> & { reason: string };
+
+export type SelectedLearning = Pick<Learning, "id" | "rule" | "status"> & { reason: string };
+
+export type ToneSelection = {
+  golds: SelectedGold[];
+  learnings: SelectedLearning[];
+  bannedPhrasesChecked: string[];
+};
+
+export function collectToneSelection(input: ToneBundleInput): ToneSelection {
   const profileId = input.profileId ?? "";
   const query = [input.facts, input.seed].filter(Boolean).join("\n");
-  const selected = retrieveGolds(input.golds, {
+  const architecture = input.architecture?.trim() ?? "";
+  const onSurface = input.golds.filter((item) => {
+    if (item.status && item.status !== "active") return false;
+    if (!item.profileId || item.profileId !== profileId) return false;
+    return item.surface === input.surfaceId;
+  });
+  const typed = architecture
+    ? onSurface.filter((item) => (item.architecture ?? "").trim() === architecture)
+    : [];
+  const untypedFallback = Boolean(architecture) && typed.length === 0;
+  const byId = new Map(input.golds.map((item) => [item.id, item]));
+  const golds = retrieveGolds(input.golds, {
     profileId,
     surface: input.surfaceId,
     query,
     seed: input.seed,
     architecture: input.architecture,
-  });
-  const retrieved = retrieveLearnings(
+  }).map((item) => ({
+    ...item,
+    reason: goldReason(byId.get(item.id), { query, architecture, untypedFallback }),
+  }));
+  const learnings = retrieveLearnings(
     input.learnings.map((item, index) => ({
       id: item.id ?? `learning-${index}`,
       profileId: item.profileId ?? "",
@@ -112,8 +138,41 @@ export function formatToneBundle(input: {
       createdAt: item.createdAt,
     })),
     { profileId, surface: input.surfaceId, query },
-  );
-  const learnings = formatLearningsForPrompt(retrieved);
+  ).map((item) => ({
+    id: item.id,
+    rule: item.rule,
+    status: item.status,
+    reason: query.trim() ? "Same surface, closest to these facts." : "Same surface.",
+  }));
+  return {
+    golds,
+    learnings,
+    bannedPhrasesChecked: bannedPhrasesChecked(input.bannedForPrompt),
+  };
+}
+
+function goldReason(
+  gold:
+    | (Partial<Pick<Gold, "canonical" | "architecture">> & { canonical?: boolean })
+    | undefined,
+  options: { query: string; architecture: string; untypedFallback: boolean },
+): string {
+  if (gold?.canonical) return "Canonical example for this surface.";
+  const matchesType = Boolean(options.architecture) && (gold?.architecture ?? "").trim() === options.architecture;
+  if (options.untypedFallback) {
+    return "No example for this post type, so this untyped one was used.";
+  }
+  if (matchesType && options.query.trim()) {
+    return "Taught example for this post type, closest to these facts.";
+  }
+  if (matchesType) return "Taught example for this post type.";
+  if (options.query.trim()) return "Taught example, closest to these facts.";
+  return "Taught example rotated in for this seed.";
+}
+
+export function formatToneBundle(input: ToneBundleInput): string {
+  const selected = collectToneSelection(input);
+  const learnings = formatLearningsForPrompt(selected.learnings);
   const mouthBanned =
     input.bannedForPrompt.length > 0
       ? input.bannedForPrompt.map((item) => `- Never: ${item}`)
@@ -137,7 +196,7 @@ export function formatToneBundle(input: {
     "",
     purpose,
     "",
-    formatGoldExamplesForPrompt(selected),
+    formatGoldExamplesForPrompt(selected.golds),
     ...(learnings ? ["", learnings] : []),
   ]
     .filter((part) => part !== "")

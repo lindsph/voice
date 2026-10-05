@@ -26,6 +26,8 @@ export const SHARED_SLOP_PROMPT = [
   "stacked “holds this, feeds that, and skips the other”",
 ];
 
+export const LANDSCAPE_PHRASE = "the landscape of / digital landscape";
+
 const LANDSCAPE_SLOP =
   /\b(?:digital|changing|evolving|business|competitive)\s+landscape\b|\bthe landscape of\b/i;
 
@@ -78,6 +80,23 @@ function hasWord(body: string, word: string): boolean {
   return new RegExp(`\\b${escapeRe(word)}\\b`, "i").test(body);
 }
 
+/** Phrases the linter actually scans. Profile bans first, then the shared slop list. */
+export function bannedPhrasesChecked(banned: string[]): string[] {
+  const mouth = banned
+    .map((item) => item.split("/")[0]?.trim().toLowerCase() ?? "")
+    .filter((item) => item.length >= 3);
+  const phrases = [...mouth, ...SHARED_SLOP_WORDS, "in today's world", LANDSCAPE_PHRASE];
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const phrase of phrases) {
+    const key = phrase.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(phrase);
+  }
+  return unique;
+}
+
 export function bannedHits(body: string, banned: string[]): string[] {
   const lower = body.toLowerCase();
   return banned.filter((item) => {
@@ -101,7 +120,7 @@ export function slopHits(body: string, surface: SlopSurface): string[] {
   for (const phrase of SHARED_SLOP_PHRASES) {
     if (text.toLowerCase().includes(phrase)) hits.push("in today's world");
   }
-  if (LANDSCAPE_SLOP.test(text)) hits.push("the landscape of / digital landscape");
+  if (LANDSCAPE_SLOP.test(text)) hits.push(LANDSCAPE_PHRASE);
 
   const antitheses = countAntitheses(text);
   const antithesisLimit = isCaptionSurface(surface) || isNoteSurface(surface) ? 1 : 2;

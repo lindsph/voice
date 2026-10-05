@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bannedHits, lintDraft, slopHits } from "./slop";
+import { bannedHits, bannedPhrasesChecked, lintDraft, slopHits } from "./slop";
 
 const CHARISE_GOLD =
   "Hey Charise — random one. I’ve started taking on a bit of side work helping small businesses with ops and the technical side: admin, the website, booking, listings, automations — the stuff that sits next to the actual work when you’re also on the floor. Noticed a couple of listings still have you at the King Street address and it made me think you might want a hand with that kind of thing. Happy to look if useful — no pressure either way.";
@@ -123,5 +123,33 @@ describe("slop lint", () => {
 
   it("catches short mouth bans like delve", () => {
     expect(bannedHits("Let’s delve into wool.", WOOLGROWN_BANNED)).toContain("delve");
+  });
+});
+
+describe("bannedPhrasesChecked", () => {
+  it("lists the mouth token plus the shared slop list, once each", () => {
+    const phrases = bannedPhrasesChecked(WOOLGROWN_BANNED);
+    expect(phrases.slice(0, 3)).toEqual([
+      "guaranteed",
+      "kills all slugs",
+      "delve",
+    ]);
+    expect(phrases.filter((phrase) => phrase === "delve")).toHaveLength(1);
+    expect(phrases).toEqual(
+      expect.arrayContaining([
+        "tapestry",
+        "furthermore",
+        "crucial",
+        "unlock",
+        "leverage",
+        "in today's world",
+        "the landscape of / digital landscape",
+      ]),
+    );
+  });
+
+  it("drops a mouth token shorter than three characters", () => {
+    expect(bannedPhrasesChecked(["ok", "ab / longer"])).not.toContain("ok");
+    expect(bannedPhrasesChecked(["ok", "ab / longer"])).not.toContain("ab");
   });
 });

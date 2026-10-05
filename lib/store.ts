@@ -1,9 +1,9 @@
 import { prisma } from "./db";
 import { formatToneBundle } from "./bundle";
-import { completeDraft, generateDraft } from "./generate";
+import { completeDraft, DRAFT_MODEL, generateDraft } from "./generate";
 import { inferPreference } from "./infer";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
-import type { Gold, Learning, Profile, Surface } from "./types";
+import type { DraftTrace, Gold, Learning, Profile, Surface } from "./types";
 
 function iso(value: Date): string {
   return value.toISOString();
@@ -170,7 +170,7 @@ export async function generateForProfile(input: {
   architecture?: string;
   format?: "blog" | "plain";
   model?: string;
-}): Promise<{ body: string; retried: boolean; bundle: string; warnings: string[] }> {
+}): Promise<{ body: string; retried: boolean; bundle: string; warnings: string[]; trace: DraftTrace }> {
   const corpus = await getBundle({
     profileId: input.profileId,
     surface: input.surface,
@@ -178,6 +178,7 @@ export async function generateForProfile(input: {
     facts: input.facts,
     architecture: input.architecture,
   });
+  const model = input.model?.trim() || DRAFT_MODEL;
   return generateDraft(
     {
       profile: corpus.profile,
@@ -188,8 +189,9 @@ export async function generateForProfile(input: {
       learnings: corpus.learnings,
       architecture: input.architecture,
       format: input.format,
+      model,
     },
-    (prompt) => completeDraft({ ...prompt, model: input.model }),
+    (prompt) => completeDraft({ ...prompt, model }),
   );
 }
 
