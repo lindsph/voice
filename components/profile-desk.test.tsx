@@ -182,27 +182,43 @@ describe("ProfileDesk page sections", () => {
     expect(screen.getByRole("heading", { name: "Drafting Workbench" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Blog" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Shop FAQ" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByText("Restricted Ground Truth Sandbox")).toBeInTheDocument();
-    expect(screen.getByText("Strict Truth Filtering ON")).toBeInTheDocument();
+    expect(screen.queryByText("Restricted Ground Truth Sandbox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Strict Truth Filtering ON")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ontario cadence score: 98%")).not.toBeInTheDocument();
+    expect(screen.queryByText("Single idea rhythm valid")).not.toBeInTheDocument();
     expect(screen.getByText("Cadence: Measured")).toBeInTheDocument();
     expect(screen.getByText("0 chars")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Teach" })).toBeDisabled();
 
-    expect(screen.getByText("Master Calibration Document")).toBeInTheDocument();
+    expect(screen.getByText("Voice guide")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Who we sound like." })).toBeInTheDocument();
-    expect(screen.getByText('"A practical Ontario grower-maker."')).toBeInTheDocument();
+    expect(screen.getByText('"A practical Ontario grower-maker."').className).not.toMatch(/bg-/);
+    expect(screen.queryByText("Master Calibration Document")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Moisture first" })).toBeInTheDocument();
     expect(screen.getByText("less watering, soil that stays damp longer.")).toBeInTheDocument();
     expect(screen.getByText("01")).toBeInTheDocument();
     expect(screen.queryByText("## Who we sound like")).not.toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Golds" })).toBeInTheDocument();
-    expect(screen.getByText("1 active archetype")).toBeInTheDocument();
-    expect(screen.getByText("How to")).toBeInTheDocument();
-    expect(screen.getAllByText("Blog").length).toBeGreaterThan(1);
-    expect(screen.getByText("Wire planters dry out fast.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Golds · Calibration Reference Library" })).toBeInTheDocument();
+    expect(screen.getByText("1 gold indexed")).toBeInTheDocument();
+    expect(screen.queryByText(/Continuous archival ledger/)).not.toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 1 indexed")).toBeInTheDocument();
+    expect(screen.getByText("Scroll to reveal archive")).toBeInTheDocument();
+    expect(screen.getAllByText("How to").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Blog").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Wire planters dry out fast\./).length).toBeGreaterThan(0);
     expect(screen.getByText("how-to-steps")).toBeInTheDocument();
     expect(screen.getByText("shop blog")).toBeInTheDocument();
+    expect(screen.getAllByText("Used in drafts").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Not picked yet")).toHaveLength(2);
+    expect(screen.getByText("Canonical Text Passage")).toBeInTheDocument();
+    expect(screen.getByText("Surface Target:")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Used in drafts" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Edit this gold" })).toBeInTheDocument();
+    expect(document.querySelector(".golds-scroll")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /How to/ })).not.toHaveTextContent("Used in drafts");
+    expect(screen.queryByText("100% pass")).not.toBeInTheDocument();
+    expect(screen.queryByText("Blog Anchor")).not.toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "What you’ve taught it" })).toBeInTheDocument();
     expect(screen.getByText("0 Active Tuning Heuristics")).toBeInTheDocument();
@@ -252,9 +268,155 @@ describe("ProfileDesk page sections", () => {
 
     expect(screen.getByText("1 Active Tuning Heuristic")).toBeInTheDocument();
     expect(screen.getByText("Do not claim wool pellets kill all slugs")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Fact" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(vi.mocked(fetch).mock.calls[1]?.[0]).toBe("/api/learnings/learn-1");
     expect(vi.mocked(fetch).mock.calls[1]?.[1]).toMatchObject({ method: "PATCH" });
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("uses the block icon for a voice teaching", () => {
+    render(
+      <ProfileDesk
+        profile={profile}
+        golds={[]}
+        learnings={[{ ...learning, id: "learn-voice", kind: "voice", rule: "Never say miracle fiber." }]}
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: "Voice" })).toBeInTheDocument();
+    expect(screen.getByText("Never say miracle fiber.")).toBeInTheDocument();
+  });
+
+  it("filters golds by search and surface", () => {
+    render(
+      <ProfileDesk
+        profile={{
+          ...profile,
+          surfaces: [
+            { id: "blog", label: "Blog", maxWords: null, hint: "A post." },
+            { id: "shop_faq", label: "Shop FAQ", maxWords: 120, hint: "A short answer." },
+          ],
+        }}
+        golds={[
+          gold,
+          {
+            ...gold,
+            id: "gold-2",
+            title: "Soil amending",
+            body: "Pellets release nitrogen steadily.",
+            surface: "shop_faq",
+            architecture: "",
+            source: "faq",
+            canonical: false,
+          },
+        ]}
+        learnings={[]}
+        draftCounts={{ "gold-1": 4, "gold-2": 1 }}
+      />,
+    );
+
+    expect(screen.getByText("2 golds indexed")).toBeInTheDocument();
+    expect(screen.getAllByText("Picked 4 times").length).toBeGreaterThan(0);
+    expect(screen.getByText("Picked once")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All (2)" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.change(screen.getByRole("textbox", { name: "Search golds" }), { target: { value: "nitrogen" } });
+    expect(screen.getByText("Showing 1 of 2 indexed")).toBeInTheDocument();
+    expect(screen.getAllByText("Soil amending").length).toBeGreaterThan(0);
+    expect(screen.queryByText("How to")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search golds" }), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show Shop FAQ golds" }));
+    expect(screen.getByText("Showing 1 of 2 indexed")).toBeInTheDocument();
+    expect(screen.queryByText("How to")).not.toBeInTheDocument();
+    expect(screen.getByText("faq")).toBeInTheDocument();
+    expect(screen.getAllByText("Picked once").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Picked 4 times")).not.toBeInTheDocument();
+    expect(screen.getByText("Cadence Pattern:").parentElement).toHaveTextContent("—");
+    expect(screen.getByText("Only when it matches")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use in drafts" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("turns a gold off for drafts and saves its text, surface, and architecture", async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...gold, canonical: false }),
+    } as Response);
+    render(
+      <ProfileDesk
+        profile={{
+          ...profile,
+          surfaces: [
+            { id: "blog", label: "Blog", maxWords: null, hint: "A post." },
+            { id: "shop_faq", label: "Shop FAQ", maxWords: 120, hint: "A short answer." },
+          ],
+        }}
+        golds={[gold]}
+        learnings={[]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Used in drafts" }));
+    expect(await screen.findByRole("button", { name: "Use in drafts" })).toHaveAttribute("aria-pressed", "false");
+    const turnOff = vi.mocked(fetch).mock.calls[0];
+    expect(turnOff?.[0]).toBe("/api/golds/gold-1");
+    expect(JSON.parse(String(turnOff?.[1] && "body" in turnOff[1] ? turnOff[1].body : ""))).toEqual({ canonical: false });
+    expect(refresh).toHaveBeenCalled();
+
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...gold,
+        canonical: false,
+        body: "Line them with fleece.",
+        surface: "shop_faq",
+        architecture: "faq",
+      }),
+    } as Response);
+    fireEvent.click(screen.getByRole("button", { name: "Edit this gold" }));
+    fireEvent.change(screen.getByLabelText("Gold text"), { target: { value: "Line them with fleece." } });
+    fireEvent.change(screen.getByLabelText("Surface"), { target: { value: "shop_faq" } });
+    fireEvent.change(screen.getByLabelText("Architecture"), { target: { value: "faq" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save gold" }));
+    expect(await screen.findByRole("button", { name: "Edit this gold" })).toBeInTheDocument();
+    expect(screen.getAllByText(/Line them with fleece\./).length).toBeGreaterThan(0);
+    expect(screen.getByText("faq")).toBeInTheDocument();
+    const save = vi.mocked(fetch).mock.calls[1];
+    expect(JSON.parse(String(save?.[1] && "body" in save[1] ? save[1].body : ""))).toEqual({
+      body: "Line them with fleece.",
+      surface: "shop_faq",
+      architecture: "faq",
+    });
+  });
+
+  it("keeps the gold unchanged when the edit is cancelled or the save fails", async () => {
+    render(
+      <ProfileDesk
+        profile={{
+          ...profile,
+          surfaces: [
+            { id: "blog", label: "Blog", maxWords: null, hint: "A post." },
+            { id: "shop_faq", label: "Shop FAQ", maxWords: 120, hint: "A short answer." },
+          ],
+        }}
+        golds={[gold]}
+        learnings={[]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit this gold" }));
+    fireEvent.change(screen.getByLabelText("Gold text"), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Save gold" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByLabelText("Gold text")).not.toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "Could not update that gold." }),
+    } as Response);
+    fireEvent.click(screen.getByRole("button", { name: "Used in drafts" }));
+    expect(await screen.findByText("Could not update that gold.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Used in drafts" })).toHaveAttribute("aria-pressed", "true");
   });
 });

@@ -25,6 +25,24 @@ export const goldSchema = z.object({
 
 export type Gold = z.infer<typeof goldSchema>;
 
+export const goldUpdateSchema = z
+  .object({
+    canonical: z.boolean().optional(),
+    body: z.string().optional(),
+    surface: z.string().optional(),
+    architecture: z.string().optional(),
+  })
+  .refine(
+    (input) =>
+      input.canonical !== undefined ||
+      input.body !== undefined ||
+      input.surface !== undefined ||
+      input.architecture !== undefined,
+    { message: "Nothing to change." },
+  );
+
+export type GoldUpdate = z.infer<typeof goldUpdateSchema>;
+
 export const learningSchema = z.object({
   id: z.string(),
   profileId: z.string(),

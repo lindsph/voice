@@ -14,6 +14,7 @@ vi.mock("./db", () => ({
 }));
 
 import {
+  countDraftsByGold,
   formatGenerationStamp,
   generationLogData,
   generationLogInput,
@@ -153,6 +154,19 @@ describe("generation review", () => {
   beforeEach(() => {
     findMany.mockReset();
     update.mockReset();
+  });
+
+  it("counts every draft that used a gold, once per draft", async () => {
+    findMany.mockResolvedValue([
+      { selectedGoldIds: ["gold-1", "gold-1", "gold-2"] },
+      { selectedGoldIds: ["gold-1"] },
+      { selectedGoldIds: [] },
+    ]);
+    await expect(countDraftsByGold("woolgrown")).resolves.toEqual({ "gold-1": 2, "gold-2": 1 });
+    expect(findMany).toHaveBeenCalledWith({
+      where: { profileId: "woolgrown" },
+      select: { selectedGoldIds: true },
+    });
   });
 
   it("lists the newest logs for one profile", async () => {

@@ -6,11 +6,12 @@ import type { Gold, Learning, Profile } from "@/lib/types";
 
 import ProfilePage from "./page";
 
-const { getProfile, listGolds, listLearnings, listGenerationLogs, loadHealthReport } = vi.hoisted(() => ({
+const { getProfile, listGolds, listLearnings, listGenerationLogs, countDraftsByGold, loadHealthReport } = vi.hoisted(() => ({
   getProfile: vi.fn(),
   listGolds: vi.fn(),
   listLearnings: vi.fn(),
   listGenerationLogs: vi.fn(),
+  countDraftsByGold: vi.fn(),
   loadHealthReport: vi.fn(),
 }));
 
@@ -33,7 +34,7 @@ vi.mock("@/lib/store", () => ({ getProfile, listGolds, listLearnings }));
 
 vi.mock("@/lib/generation-log", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/generation-log")>();
-  return { ...actual, listGenerationLogs };
+  return { ...actual, listGenerationLogs, countDraftsByGold };
 });
 
 vi.mock("@/lib/health", async (importOriginal) => {
@@ -99,11 +100,13 @@ describe("Profile page", () => {
     listGolds.mockReset();
     listLearnings.mockReset();
     listGenerationLogs.mockReset();
+    countDraftsByGold.mockReset();
     loadHealthReport.mockReset();
     getProfile.mockResolvedValue(profile);
     listGolds.mockResolvedValue([gold]);
     listLearnings.mockResolvedValue([learning]);
     listGenerationLogs.mockResolvedValue([]);
+    countDraftsByGold.mockResolvedValue({ "gold-1": 3 });
     loadHealthReport.mockImplementation(async (_id: string, days: HealthDays) => buildHealthReport([], { days }));
   });
 
@@ -115,18 +118,19 @@ describe("Profile page", () => {
     expect(screen.queryByRole("link", { name: "Home" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Back to all profiles" })).not.toBeInTheDocument();
     expect(screen.queryByText("v4.6 Opus Core")).not.toBeInTheDocument();
+    expect(screen.queryByText("Active Model Calibration")).not.toBeInTheDocument();
+    expect(screen.queryByText("Verified Origin")).not.toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "WoolGrown" })).toBeInTheDocument();
-    expect(screen.getByText("Active Model Calibration")).toBeInTheDocument();
     expect(screen.getAllByText("Ontario grower-maker. Garden wool.").length).toBeGreaterThan(0);
-    expect(screen.getByText("Surfaces: Blog · Shop FAQ")).toBeInTheDocument();
+    expect(screen.getAllByText("Surfaces: Blog · Shop FAQ")).toHaveLength(2);
     expect(screen.getByText("Core Directive")).toBeInTheDocument();
     expect(screen.getByText("Profile ID: woolgrown")).toBeInTheDocument();
-    expect(screen.getByText("Verified Origin")).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "Who we sound like." })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Moisture first" })).toBeInTheDocument();
-    expect(screen.getByText("How to")).toBeInTheDocument();
+    expect(screen.getAllByText("How to").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Picked 3 times").length).toBeGreaterThan(0);
     expect(screen.getByText("Do not claim wool pellets kill all slugs")).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "Health" })).toBeInTheDocument();
@@ -146,6 +150,9 @@ describe("Profile page", () => {
     expect(listGolds).toHaveBeenCalledWith("woolgrown");
     expect(listLearnings).toHaveBeenCalledWith("woolgrown");
     expect(listGenerationLogs).toHaveBeenCalledWith("woolgrown");
+    expect(countDraftsByGold).toHaveBeenCalledWith("woolgrown");
+    expect(screen.getByText("Voice guide")).toBeInTheDocument();
+    expect(screen.queryByText("Master Calibration Document")).not.toBeInTheDocument();
   });
 
   it("defaults the health window to 14 days", async () => {

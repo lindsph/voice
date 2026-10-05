@@ -9,7 +9,7 @@ import {
   resolveLearningKind,
 } from "./learning-kind";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
-import type { DraftTrace, Gold, Learning, Profile, Surface } from "./types";
+import type { DraftTrace, Gold, GoldUpdate, Learning, Profile, Surface } from "./types";
 
 function iso(value: Date): string {
   return value.toISOString();
@@ -330,6 +330,32 @@ export async function dismissLearning(id: string): Promise<Learning> {
     return toLearning(row);
   } catch {
     throw new Error(`Unknown learning: ${id}`);
+  }
+}
+
+export async function updateGold(id: string, input: GoldUpdate): Promise<Gold> {
+  const data: { canonical?: boolean; body?: string; surface?: string; architecture?: string } = {};
+  if (typeof input.canonical === "boolean") data.canonical = input.canonical;
+  if (input.body !== undefined) {
+    const body = input.body.trim();
+    if (!body) throw new Error("Add the gold text.");
+    data.body = body;
+  }
+  if (input.surface !== undefined) {
+    const surface = input.surface.trim();
+    if (!surface) throw new Error("Pick a surface.");
+    data.surface = surface;
+  }
+  if (input.architecture !== undefined) data.architecture = input.architecture.trim();
+  if (Object.keys(data).length === 0) throw new Error("Nothing to change.");
+  try {
+    const row = await prisma.gold.update({ where: { id }, data });
+    return toGold(row);
+  } catch (error) {
+    if (error instanceof Error && (error.message === "Add the gold text." || error.message === "Pick a surface." || error.message === "Nothing to change.")) {
+      throw error;
+    }
+    throw new Error(`Unknown gold: ${id}`);
   }
 }
 

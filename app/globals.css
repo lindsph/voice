@@ -47,3 +47,23 @@
   font-size: 1.8rem;
   font-weight: 500;
 }
+
+.golds-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #534434 transparent;
+}
+
+.golds-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.golds-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.golds-scroll::-webkit-scrollbar-thumb {
+  background: #534434;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}

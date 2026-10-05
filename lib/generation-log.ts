@@ -135,6 +135,21 @@ function toRow(row: {
   };
 }
 
+/** One count per draft that included the gold. Every logged draft, not the recent list. */
+export async function countDraftsByGold(profileId: string): Promise<Record<string, number>> {
+  const rows = await prisma.generationLog.findMany({
+    where: { profileId },
+    select: { selectedGoldIds: true },
+  });
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    for (const id of new Set(row.selectedGoldIds)) {
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
 export async function listGenerationLogs(profileId: string): Promise<GenerationLogRow[]> {
   const rows = await prisma.generationLog.findMany({
     where: { profileId },
