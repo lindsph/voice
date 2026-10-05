@@ -8,6 +8,36 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum GoldStatus {
+  active
+  dismissed
+}
+
+enum LearningStatus {
+  active
+  dismissed
+}
+
+enum LearningKind {
+  voice
+  fact
+  unknown
+}
+
+enum ClassificationSource {
+  same_call
+  separate_call
+  heuristic
+  fallback
+}
+
+enum GenerationOutcome {
+  pending
+  kept
+  edited
+  rejected
+}
+
 model Profile {
   id             String     @id
   name           String
@@ -35,7 +65,7 @@ model Gold {
   /// Host-supplied kind (e.g. how-to-steps). Empty = untyped. Voice does not interpret it.
   architecture String @default("")
   canonical  Boolean  @default(false)
-  status     String   @default("active")
+  status     GoldStatus @default(active)
   createdAt  DateTime
 
   @@index([profileId, status, surface])
@@ -46,13 +76,13 @@ model Learning {
   profileId     String
   profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   rule          String
-  status        String   @default("active")
+  status        LearningStatus @default(active)
   before        String   @default("")
   after         String   @default("")
   why           String   @default("")
   surface       String   @default("")
-  kind                     String   @default("unknown")
-  classificationSource     String   @default("fallback")
+  kind                     LearningKind         @default(unknown)
+  classificationSource     ClassificationSource @default(fallback)
   classificationMismatch   Boolean  @default(false)
   sourceDraftId String?
   createdAt     DateTime
@@ -81,7 +111,7 @@ model GenerationLog {
   retried             Boolean  @default(false)
   retryReason         String?
 
-  outcome    String  @default("pending")
+  outcome    GenerationOutcome @default(pending)
   editedBody String?
   userNote   String?
 
