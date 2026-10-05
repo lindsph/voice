@@ -67,7 +67,7 @@ function GenerationRow({
     : "no";
 
   return (
-    <li>
+    <li id={`generation-${log.id}`}>
       <p>
         {[
           formatGenerationStamp(log.createdAt, timeZone),

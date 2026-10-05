@@ -60,6 +60,7 @@ describe("RecentGenerations", () => {
       json: async () => ({ ...log, outcome: "kept" }),
     } as Response);
     render(<RecentGenerations profile={profile} logs={[log]} timeZone="America/New_York" />);
+    expect(document.getElementById("generation-log-1")).toBeTruthy();
     expect(screen.getByText("Oct 5, 9:28 AM · Blog · how-to-steps · Claude Opus 4.6")).toBeInTheDocument();
     expect(screen.getByText("Outcome: Pending")).toBeInTheDocument();
     expect(screen.getByText("Warnings: none")).toBeInTheDocument();

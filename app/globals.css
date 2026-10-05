@@ -158,6 +158,20 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .recent-generations { margin-top: 16px; }
 
+.health { margin-top: 16px; }
+.health h3 { margin: 16px 0 6px; font-size: 0.98rem; }
+.health-range { display: flex; gap: 12px; margin: 0 0 10px; }
+.health-range a[aria-current="page"] { font-weight: 650; }
+.health-metrics, .health-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.health-metrics { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.health-metrics li { margin: 0; }
+.health-list { display: grid; gap: 6px; }
+.health-list li { margin: 0; }
+
 .generation-list {
   list-style: none;
   margin: 12px 0 0;
