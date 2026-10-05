@@ -91,6 +91,36 @@ export const generateInputSchema = z.object({
   model: z.string().optional(),
 });
 
+export const generationOutcomeSchema = z.enum(["pending", "kept", "edited", "rejected"]);
+
+export type GenerationOutcome = z.infer<typeof generationOutcomeSchema>;
+
+export type GenerationLogRow = {
+  id: string;
+  createdAt: string;
+  profileId: string;
+  surfaceId: string;
+  architecture: string | null;
+  seed: string | null;
+  model: string | null;
+  facts: string;
+  generatedBody: string;
+  selectedGoldIds: string[];
+  selectedLearningIds: string[];
+  warnings: string[];
+  retried: boolean;
+  retryReason: string | null;
+  outcome: GenerationOutcome;
+  editedBody: string | null;
+  userNote: string | null;
+};
+
+export const generationReviewSchema = z.object({
+  outcome: z.enum(["kept", "edited", "rejected"]),
+  editedBody: z.string().optional(),
+  userNote: z.string().optional(),
+});
+
 export const learnInputSchema = z.object({
   before: z.string().optional().default(""),
   after: z.string().optional().default(""),

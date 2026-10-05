@@ -19,6 +19,7 @@ model Profile {
   updatedAt      DateTime   @updatedAt
   golds          Gold[]
   learnings      Learning[]
+  generationLogs GenerationLog[]
 }
 
 model Gold {
@@ -55,4 +56,31 @@ model Learning {
   updatedAt     DateTime
 
   @@index([profileId, status, createdAt])
+}
+
+model GenerationLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  profileId    String
+  profile      Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  surfaceId    String
+  architecture String?
+  seed         String?
+
+  model         String?
+  facts         String
+  generatedBody String
+
+  selectedGoldIds     String[]
+  selectedLearningIds String[]
+  warnings            String[]
+  retried             Boolean  @default(false)
+  retryReason         String?
+
+  outcome    String  @default("pending")
+  editedBody String?
+  userNote   String?
+
+  @@index([profileId, createdAt])
 }

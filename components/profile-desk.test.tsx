@@ -75,6 +75,7 @@ describe("ProfileDesk draft trace", () => {
     expect(screen.queryByText(/^Seed:/)).not.toBeInTheDocument();
     expect(screen.getByText("Drafted. Edit it, then teach.")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Wool in the booth.")).toBeInTheDocument();
+    expect(refresh).toHaveBeenCalled();
 
     const call = vi.mocked(fetch).mock.calls[0];
     expect(call?.[0]).toBe("/api/profiles/woolgrown/generate");

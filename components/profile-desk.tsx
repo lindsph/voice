@@ -50,6 +50,7 @@ export function ProfileDesk({ profile, golds, learnings }: Props) {
       setBaseline(payload.body);
       setTrace(payload.trace ?? null);
       setWarnings(payload.warnings ?? []);
+      router.refresh();
       if (payload.warnings && payload.warnings.length > 0) {
         setNotice(
           `Drafted. Still a slop tell after one retry: ${payload.warnings.join("; ")}. Edit it, then teach.`,

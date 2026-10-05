@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import { formatToneBundle } from "./bundle";
+import { generationLogInput, logGeneration } from "./generation-log";
 import { completeDraft, DRAFT_MODEL, generateDraft } from "./generate";
 import { inferPreference } from "./infer";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
@@ -179,7 +180,7 @@ export async function generateForProfile(input: {
     architecture: input.architecture,
   });
   const model = input.model?.trim() || DRAFT_MODEL;
-  return generateDraft(
+  const result = await generateDraft(
     {
       profile: corpus.profile,
       surfaceId: input.surface,
@@ -193,6 +194,21 @@ export async function generateForProfile(input: {
     },
     (prompt) => completeDraft({ ...prompt, model }),
   );
+  try {
+    await logGeneration(
+      generationLogInput({
+        profileId: input.profileId,
+        surface: input.surface,
+        architecture: input.architecture,
+        seed: input.seed,
+        facts: input.facts,
+        result,
+      }),
+    );
+  } catch (error) {
+    console.error("Failed to log generation", error);
+  }
+  return result;
 }
 
 export async function learnForProfile(input: {
