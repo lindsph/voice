@@ -39,6 +39,36 @@ const woolgrownSocial = {
 };
 
 describe("retrieveLearnings", () => {
+  it("returns active learnings of every kind", () => {
+    const fact = {
+      ...lindsayNote,
+      id: "tl-fact",
+      kind: "fact" as const,
+      rule: "Do not claim wool pellets kill all slugs",
+      createdAt: "2026-09-21T12:00:00.000Z",
+    };
+    const voice = {
+      ...lindsayNote,
+      id: "tl-voice",
+      kind: "voice" as const,
+      rule: "Do not introduce yourself when you already know them",
+      createdAt: "2026-09-21T11:00:00.000Z",
+    };
+    const unknown = {
+      ...lindsayNote,
+      id: "tl-unknown",
+      kind: "unknown" as const,
+      rule: "Remember the booth number.",
+      createdAt: "2026-09-21T10:00:00.000Z",
+    };
+    const picked = retrieveLearnings([fact, voice, unknown], {
+      profileId: "lindsay",
+      surface: "first_note",
+      query: "",
+    });
+    expect(picked.map((item) => item.id).sort()).toEqual(["tl-fact", "tl-unknown", "tl-voice"]);
+  });
+
   it("never returns another mouth’s rules", () => {
     const picked = retrieveLearnings([lindsayNote, woolgrownSocial], {
       profileId: "lindsay",

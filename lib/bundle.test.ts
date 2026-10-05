@@ -150,6 +150,85 @@ Wire planters and hanging baskets dry out fast.
     expect(bundle).toMatch(/do not paraphrase wholesale/i);
     expect(bundle).toMatch(/delve, tapestry/);
     expect(bundle).not.toMatch(/kills all slugs/i);
+    expect(bundle).not.toMatch(/Classify the preference/);
+  });
+
+  it("keeps a fact learning in the draft prompt without labeling its kind", () => {
+    const bundle = formatToneBundle({
+      guide: GUIDE,
+      bannedForPrompt: ["delve"],
+      profileId: "woolgrown",
+      surface: {
+        id: "blog",
+        label: "Blog",
+        maxWords: 800,
+        hint: "One claim, then the how.",
+      },
+      surfaceId: "blog",
+      seed: "pellets",
+      golds: [],
+      learnings: [
+        {
+          id: "tl-fact",
+          profileId: "woolgrown",
+          rule: "Do not claim wool pellets kill all slugs",
+          status: "active",
+          surface: "blog",
+          kind: "fact",
+        },
+      ],
+    });
+    expect(bundle).toMatch(/Do not claim wool pellets kill all slugs/);
+    expect(bundle).not.toMatch(/Classify the preference/);
+    expect(bundle).not.toMatch(/Classify this learning rule/);
+    expect(bundle).not.toMatch(/\bkind\b/);
+  });
+
+  it("includes active learnings regardless of kind", () => {
+    const bundle = formatToneBundle({
+      guide: GUIDE,
+      bannedForPrompt: [],
+      profileId: "woolgrown",
+      surface: {
+        id: "blog",
+        label: "Blog",
+        maxWords: 800,
+        hint: "One claim, then the how.",
+      },
+      surfaceId: "blog",
+      seed: "beds",
+      golds: [],
+      learnings: [
+        {
+          id: "voice",
+          profileId: "woolgrown",
+          rule: "Use contractions.",
+          status: "active",
+          surface: "blog",
+          kind: "voice",
+        },
+        {
+          id: "fact",
+          profileId: "woolgrown",
+          rule: "Do not invent studies.",
+          status: "active",
+          surface: "blog",
+          kind: "fact",
+        },
+        {
+          id: "unknown",
+          profileId: "woolgrown",
+          rule: "Keep it practical.",
+          status: "active",
+          surface: "blog",
+          kind: "unknown",
+        },
+      ],
+    });
+    expect(bundle).toContain("Use contractions.");
+    expect(bundle).toContain("Do not invent studies.");
+    expect(bundle).toContain("Keep it practical.");
+    expect(bundle).not.toContain("Classify this learning rule");
   });
 
   it("does not put lindsay identity bans into a woolgrown bundle", () => {

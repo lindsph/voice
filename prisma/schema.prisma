@@ -51,6 +51,9 @@ model Learning {
   after         String   @default("")
   why           String   @default("")
   surface       String   @default("")
+  kind                     String   @default("unknown")
+  classificationSource     String   @default("fallback")
+  classificationMismatch   Boolean  @default(false)
   sourceDraftId String?
   createdAt     DateTime
   updatedAt     DateTime

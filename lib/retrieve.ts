@@ -36,7 +36,18 @@ export function learningEvidence(item: {
 export function retrieveLearnings(
   learnings: Array<
     Pick<Learning, "id" | "profileId" | "rule" | "status" | "surface"> &
-      Partial<Pick<Learning, "before" | "after" | "why" | "createdAt">>
+      Partial<
+        Pick<
+          Learning,
+          | "before"
+          | "after"
+          | "why"
+          | "createdAt"
+          | "kind"
+          | "classificationSource"
+          | "classificationMismatch"
+        >
+      >
   >,
   options: {
     profileId: string;

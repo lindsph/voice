@@ -9,6 +9,9 @@ export type DerivedLearning = {
   before: string;
   after: string;
   why: string;
+  kind?: "voice" | "fact" | "unknown";
+  classificationSource?: "same_call" | "separate_call" | "heuristic" | "fallback";
+  classificationMismatch?: boolean;
 };
 
 /** CIPHER wants a preference description, not the after-sentence in the prompt. */

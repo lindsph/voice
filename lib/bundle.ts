@@ -1,3 +1,4 @@
+import { isClassificationSource, isLearningKind } from "./learning-kind";
 import { retrieveGolds, retrieveLearnings } from "./retrieve";
 import { bannedPhrasesChecked, SHARED_SLOP_PROMPT } from "./slop";
 import type { Gold, Learning, Surface } from "./types";
@@ -87,13 +88,32 @@ export type ToneBundleInput = {
   architecture?: string;
   learnings: Array<
     Pick<Learning, "rule" | "status"> &
-      Partial<Pick<Learning, "id" | "profileId" | "surface" | "before" | "after" | "why" | "createdAt">>
+      Partial<
+        Pick<
+          Learning,
+          | "id"
+          | "profileId"
+          | "surface"
+          | "before"
+          | "after"
+          | "why"
+          | "createdAt"
+          | "kind"
+          | "classificationSource"
+          | "classificationMismatch"
+        >
+      >
   >;
 };
 
 export type SelectedGold = Pick<Gold, "id" | "title" | "body"> & { reason: string };
 
-export type SelectedLearning = Pick<Learning, "id" | "rule" | "status"> & { reason: string };
+export type SelectedLearning = Pick<Learning, "id" | "rule" | "status"> & {
+  reason: string;
+  kind?: Learning["kind"];
+  classificationSource?: Learning["classificationSource"];
+  classificationMismatch?: boolean;
+};
 
 export type ToneSelection = {
   golds: SelectedGold[];
@@ -136,6 +156,10 @@ export function collectToneSelection(input: ToneBundleInput): ToneSelection {
       after: item.after,
       why: item.why,
       createdAt: item.createdAt,
+      kind: "kind" in item ? item.kind : undefined,
+      classificationSource: "classificationSource" in item ? item.classificationSource : undefined,
+      classificationMismatch:
+        "classificationMismatch" in item ? item.classificationMismatch : undefined,
     })),
     { profileId, surface: input.surfaceId, query },
   ).map((item) => ({
@@ -143,6 +167,13 @@ export function collectToneSelection(input: ToneBundleInput): ToneSelection {
     rule: item.rule,
     status: item.status,
     reason: query.trim() ? "Same surface, closest to these facts." : "Same surface.",
+    ...(isLearningKind(item.kind) ? { kind: item.kind } : {}),
+    ...(isClassificationSource(item.classificationSource)
+      ? { classificationSource: item.classificationSource }
+      : {}),
+    ...(typeof item.classificationMismatch === "boolean"
+      ? { classificationMismatch: item.classificationMismatch }
+      : {}),
   }));
   return {
     golds,

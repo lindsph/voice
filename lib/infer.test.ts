@@ -75,6 +75,7 @@ describe("inferPreferenceHeuristic", () => {
       why: "Don’t open like a stranger pitching a listing fix.",
     });
     expect(learned?.rule).toBe("Don’t open like a stranger pitching a listing fix.");
+    expect(learned?.kind).toBe("voice");
     expect(learned?.before).toMatch(/pick your brain/);
     expect(learned?.after).toMatch(/random one/);
     expect(learned?.rule).not.toMatch(/Keep this voice/);
@@ -104,6 +105,16 @@ describe("inferPreferenceHeuristic", () => {
         existingRule: "Use Canadian spelling.",
       })?.rule,
     ).toBe("Use Canadian spelling.");
+    expect(
+      inferPreferenceHeuristic({
+        existingRule: "Use Canadian spelling.",
+      })?.kind,
+    ).toBe("unknown");
+    expect(
+      inferPreferenceHeuristic({
+        existingRule: "Do not claim wool pellets kill all slugs",
+      })?.kind,
+    ).toBe("fact");
     expect(
       inferPreferenceHeuristic({
         existingRule: `Prefer "centre" over "center"`,
@@ -147,6 +158,8 @@ describe("inferPreference", () => {
       async () => "Don’t introduce yourself when you already know them.",
     );
     expect(learned?.rule).toBe("Don’t introduce yourself when you already know them.");
+    expect(learned?.kind).toBe("unknown");
+    expect(learned?.classificationSource).toBe("fallback");
     expect(learned?.before).toMatch(/pick your brain/);
     expect(learned?.after).toMatch(/No pressure/);
   });
@@ -160,6 +173,106 @@ describe("inferPreference", () => {
       async () => 'Keep this voice: "Hey — random one. Happy to look if useful."',
     );
     expect(learned).toBeNull();
+  });
+
+  it("keeps a kind returned beside the inferred rule", async () => {
+    let system = "";
+    const learned = await inferPreference(
+      {
+        before: "Wool pellets kill every slug in the bed.",
+        after: "Wool pellets are a slug deterrent. They do not kill every slug.",
+      },
+      async (input) => {
+        system = input.system;
+        return JSON.stringify({
+          rule: "Do not claim wool pellets kill all slugs",
+          kind: "fact",
+        });
+      },
+    );
+    expect(learned?.rule).toBe("Do not claim wool pellets kill all slugs");
+    expect(learned?.kind).toBe("fact");
+    expect(learned?.classificationMismatch).toBe(false);
+    expect(system).not.toMatch(/Tone rules \(always follow\)/);
+    expect(system).not.toMatch(/Classify this learning rule/);
+  });
+
+  it("preserves the exact inferred rule even if the classifier returns different text", async () => {
+    const expectedRule = "Do not introduce yourself when you already know them.";
+    const learned = await inferPreference(
+      {
+        before: "Hi, I would love to pick your brain about your listings.",
+        after: "Hey, happy to look if useful.",
+      },
+      async (input) => {
+        if (input.system.startsWith("Classify this learning rule.")) {
+          return JSON.stringify({
+            rule: "Avoid introducing yourself to someone you already know.",
+            kind: "voice",
+          });
+        }
+        return expectedRule;
+      },
+    );
+    expect(learned?.rule).toBe(expectedRule);
+    expect(learned?.kind).toBe("voice");
+    expect(learned?.classificationMismatch).toBe(true);
+    expect(learned?.classificationSource).toBe("separate_call");
+  });
+
+  it("falls back to unknown when kind is invalid", async () => {
+    const learned = await inferPreference(
+      {
+        before: "This guaranteed mulch will transform your beds.",
+        after: "Gardeners often report fewer slug visits; controlled studies are still thin.",
+      },
+      async () =>
+        JSON.stringify({
+          rule: "Do not make unsupported pest-control claims.",
+          kind: "accuracy",
+        }),
+    );
+    expect(learned?.rule).toBe("Do not make unsupported pest-control claims.");
+    expect(learned?.kind).toBe("unknown");
+  });
+
+  it("defaults to unknown when kind is missing", async () => {
+    const learned = await inferPreference({
+      rule: "Keep the easy out.",
+      complete: async () => JSON.stringify({ rule: "Keep the easy out." }),
+    });
+    expect(learned?.rule).toBe("Keep the easy out.");
+    expect(learned?.kind).toBe("unknown");
+  });
+
+  it("still saves the learning with unknown kind when classification fails", async () => {
+    const learned = await inferPreference(
+      {
+        before: "Hey — I’d love to pick your brain about your listings this week.",
+        after: "Hey — random one. Happy to look if useful. No pressure either way.",
+      },
+      async (input) => {
+        if (input.system.startsWith("Classify this learning rule.")) {
+          throw new Error("classifier unavailable");
+        }
+        return "Keep the easy out.";
+      },
+    );
+    expect(learned?.rule).toBe("Keep the easy out.");
+    expect(learned?.kind).toBe("unknown");
+    expect(learned?.classificationSource).toBe("fallback");
+  });
+
+  it("defaults kind to unknown when the model kind is unusable", async () => {
+    const learned = await inferPreference(
+      {
+        before: "Wool pellets kill every slug in the bed.",
+        after: "Wool pellets are a slug deterrent. They do not kill every slug.",
+      },
+      async () => JSON.stringify({ rule: "Remember the booth number.", kind: "maybe" }),
+    );
+    expect(learned?.rule).toBe("Remember the booth number.");
+    expect(learned?.kind).toBe("unknown");
   });
 
   it("writes nothing when the model says the edit was only a fact", async () => {

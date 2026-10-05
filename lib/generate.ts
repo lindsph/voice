@@ -141,7 +141,16 @@ function draftTrace(
     ...(architecture ? { architecture } : {}),
     ...(retryHits && retryHits.length > 0 ? { retryReason: formatRetryReason(retryHits) } : {}),
     selectedGolds: selection.golds.map(({ id, title, reason }) => ({ id, title, reason })),
-    selectedLearnings: selection.learnings.map(({ id, rule, reason }) => ({ id, rule, reason })),
+    selectedLearnings: selection.learnings.map((item) => ({
+      id: item.id,
+      rule: item.rule,
+      reason: item.reason,
+      ...(item.kind ? { kind: item.kind } : {}),
+      ...(item.classificationSource ? { classificationSource: item.classificationSource } : {}),
+      ...(typeof item.classificationMismatch === "boolean"
+        ? { classificationMismatch: item.classificationMismatch }
+        : {}),
+    })),
   };
 }
 

@@ -3,6 +3,11 @@ import { formatToneBundle } from "./bundle";
 import { generationLogInput, logGeneration } from "./generation-log";
 import { completeDraft, DRAFT_MODEL, generateDraft } from "./generate";
 import { inferPreference } from "./infer";
+import {
+  isClassificationSource,
+  isLearningKind,
+  resolveLearningKind,
+} from "./learning-kind";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
 import type { DraftTrace, Gold, Learning, Profile, Surface } from "./types";
 
@@ -77,6 +82,9 @@ function toLearning(row: {
   after: string;
   why: string;
   surface: string;
+  kind: string;
+  classificationSource: string;
+  classificationMismatch: boolean;
   sourceDraftId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -90,6 +98,11 @@ function toLearning(row: {
     after: row.after,
     why: row.why,
     surface: row.surface,
+    kind: isLearningKind(row.kind) ? row.kind : "unknown",
+    classificationSource: isClassificationSource(row.classificationSource)
+      ? row.classificationSource
+      : "fallback",
+    classificationMismatch: row.classificationMismatch,
     sourceDraftId: row.sourceDraftId,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
@@ -222,6 +235,7 @@ export async function learnForProfile(input: {
   surface?: string;
   architecture?: string;
   sourceDraftId?: string | null;
+  kind?: "voice" | "fact" | "unknown";
 }): Promise<{ learningCount: number; keptGold: boolean; learnings: Learning[] }> {
   const stamp = new Date();
   const inferred = await inferPreference({
@@ -253,6 +267,9 @@ export async function learnForProfile(input: {
         after: item.after,
         why: item.why,
         surface: input.surface ?? "",
+        kind: resolveLearningKind(input.kind, item.kind ?? "unknown"),
+        classificationSource: item.classificationSource ?? "fallback",
+        classificationMismatch: item.classificationMismatch ?? false,
         sourceDraftId: input.sourceDraftId ?? null,
         createdAt: stamp,
         updatedAt: stamp,

@@ -34,6 +34,11 @@ export const learningSchema = z.object({
   after: z.string(),
   why: z.string(),
   surface: z.string(),
+  kind: z.enum(["voice", "fact", "unknown"]).default("unknown"),
+  classificationSource: z
+    .enum(["same_call", "separate_call", "heuristic", "fallback"])
+    .default("fallback"),
+  classificationMismatch: z.boolean().default(false),
   sourceDraftId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -64,6 +69,9 @@ export type DraftTraceLearning = {
   id: string;
   rule: string;
   reason: string;
+  kind?: "voice" | "fact" | "unknown";
+  classificationSource?: "same_call" | "separate_call" | "heuristic" | "fallback";
+  classificationMismatch?: boolean;
 };
 
 /** Compact record of what a generate call actually used. IDs and counts, not the prompt. */
@@ -131,4 +139,5 @@ export const learnInputSchema = z.object({
   surface: z.string().optional().default(""),
   architecture: z.string().optional().default(""),
   sourceDraftId: z.string().nullable().optional(),
+  kind: z.enum(["voice", "fact", "unknown"]).optional(),
 });

@@ -13,6 +13,7 @@
 
 import { completeWithOpenAi, type ChatComplete, unwrapDraft } from "./generate";
 import { isQuotedSnippetRule, ruleForPrompt, type DerivedLearning } from "./learn";
+import { classifyLearningKind, settleClassification } from "./learning-kind";
 
 export { isQuotedSnippetRule } from "./learn";
 
@@ -26,7 +27,10 @@ export type PreferenceInput = {
   after?: string;
   why?: string;
   existingRule?: string;
+  /** Alias for existingRule so a caller can pass the rule it already has. */
+  rule?: string;
   surface?: string;
+  complete?: ChatComplete;
 };
 
 const INFER_SYSTEM = [
@@ -38,6 +42,16 @@ const INFER_SYSTEM = [
   "Do not say “Keep this voice” or paste the revised sentence.",
   "If the edit is only factual (a number, a name, a link) and not stylistic, reply NONE.",
 ].join(" ");
+
+const CLASSIFY_SYSTEM = [
+  "Classify this learning rule.",
+  "Return only JSON: {\"kind\":\"voice\"|\"fact\"|\"unknown\"}.",
+  "Definitions:",
+  "- \"voice\": tone, style, persona, sentence construction, word choice, formality, or how the writing should sound.",
+  "- \"fact\": factual accuracy, claims, evidence, citations, numbers, or what the content is allowed to say.",
+  "- \"unknown\": uncertain or mixed.",
+  "Do not rewrite, shorten, expand, translate, or interpret the rule.",
+].join("\n");
 
 function clipRule(rule: string): string {
   return rule.replace(/\s+/g, " ").trim().slice(0, MAX_RULE);
@@ -79,7 +93,7 @@ function note(input: PreferenceInput): string {
 }
 
 function providedRule(input: PreferenceInput): string {
-  return input.existingRule?.replace(/\s+/g, " ").trim() ?? "";
+  return (input.existingRule ?? input.rule)?.replace(/\s+/g, " ").trim() ?? "";
 }
 
 /**
@@ -113,13 +127,13 @@ export function inferPreferenceHeuristic(input: PreferenceInput): DerivedLearnin
   const why = note(input);
   if (why.length >= 8) {
     const rule = clipRule(why);
-    return isQuotedSnippetRule(rule) ? null : { ...base, rule };
+    return isQuotedSnippetRule(rule) ? null : tagged(base, rule, "heuristic");
   }
 
   const existing = providedRule(input);
   const kept = existing ? ruleForPrompt(existing) : null;
   if (kept) {
-    return { ...base, rule: clipRule(kept) };
+    return tagged(base, clipRule(kept), "heuristic");
   }
 
   return null;
@@ -139,6 +153,31 @@ export function normalizeInferredRule(raw: string, after = ""): string | null {
     }
   }
   return rule;
+}
+
+function tagged(
+  base: DerivedLearning,
+  rule: string,
+  classificationSource: "heuristic",
+): DerivedLearning {
+  return {
+    ...base,
+    rule,
+    kind: classifyLearningKind(rule),
+    classificationSource,
+    classificationMismatch: false,
+  };
+}
+
+function readJson(text: string): unknown {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(text.slice(start, end + 1)) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function skipLlm(): boolean {
@@ -174,27 +213,67 @@ export async function inferPreference(
   if (!needsLlm(input)) {
     return inferPreferenceHeuristic(input);
   }
-  if (!complete && skipLlm()) {
+  const run =
+    input.complete ??
+    complete ??
+    ((payload) => completeWithOpenAi({ ...payload, temperature: 0.2 }));
+  if (!input.complete && !complete && skipLlm()) {
     return inferPreferenceHeuristic(input);
   }
 
   const user = inferUserPrompt(input);
   if (!user) return inferPreferenceHeuristic(input);
-  const run =
-    complete ?? ((payload) => completeWithOpenAi({ ...payload, temperature: 0.2 }));
 
   try {
     const raw = await run({ system: INFER_SYSTEM, user });
-    if (/^\s*NONE\b/i.test(unwrapDraft(raw))) return null;
-    const rule = normalizeInferredRule(raw, input.after ?? "");
-    if (!rule) return inferPreferenceHeuristic(input);
+    const text = unwrapDraft(raw).trim();
+    if (/^\s*NONE\b/i.test(text)) return null;
+
+    const json = readJson(text);
+    const jsonRule =
+      json && typeof json === "object" && "rule" in json && typeof json.rule === "string"
+        ? json.rule
+        : null;
+    const inferredRule = normalizeInferredRule(jsonRule ?? text, input.after ?? "");
+    if (!inferredRule) return inferPreferenceHeuristic(input);
+
     const fallback = inferPreferenceHeuristic(input);
-    return {
-      rule,
+    const evidence = {
       before: fallback?.before || input.before?.trim() || "",
       after: fallback?.after || input.after?.trim() || "",
       why: fallback?.why || note(input),
     };
+
+    if (json) {
+      const settled = settleClassification({
+        expectedRule: inferredRule,
+        raw: json,
+        source: "same_call",
+      });
+      return { ...evidence, ...settled };
+    }
+
+    try {
+      const classified = await run({
+        system: CLASSIFY_SYSTEM,
+        user: `Rule: "${inferredRule}"`,
+      });
+      const payload = readJson(unwrapDraft(classified));
+      const settled = settleClassification({
+        expectedRule: inferredRule,
+        raw: payload ?? {},
+        source: "separate_call",
+      });
+      return { ...evidence, ...settled };
+    } catch {
+      return {
+        ...evidence,
+        rule: inferredRule,
+        kind: "unknown",
+        classificationSource: "fallback",
+        classificationMismatch: false,
+      };
+    }
   } catch {
     return inferPreferenceHeuristic(input);
   }

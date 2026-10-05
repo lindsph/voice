@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildUserPrompt,
   completeDraft,
   completeWithAnthropic,
   DRAFT_MODEL,
@@ -298,6 +299,74 @@ describe("generateDraft slop retry", () => {
     expect(result.trace.selectedLearnings[0]?.reason).toMatch(/Same surface/);
     expect(result.bundle).toContain("How to");
     expect(result.bundle).not.toContain("booth this weekend");
+  });
+
+  it("carries learning kind on the trace and leaves the draft prompt alone", async () => {
+    const input = {
+      ...draftInput(woolgrown, "social"),
+      facts: "CNE this week.",
+      learnings: [
+        {
+          id: "voice",
+          profileId: "woolgrown",
+          rule: "Use contractions.",
+          status: "active" as const,
+          surface: "social",
+          kind: "voice" as const,
+          classificationSource: "heuristic" as const,
+          classificationMismatch: false,
+        },
+        {
+          id: "fact",
+          profileId: "woolgrown",
+          rule: "Do not invent studies.",
+          status: "active" as const,
+          surface: "social",
+          kind: "fact" as const,
+          classificationSource: "separate_call" as const,
+          classificationMismatch: false,
+        },
+        {
+          id: "unknown",
+          profileId: "woolgrown",
+          rule: "Keep it practical.",
+          status: "active" as const,
+          surface: "social",
+          kind: "unknown" as const,
+          classificationSource: "fallback" as const,
+          classificationMismatch: true,
+        },
+      ],
+    };
+    const before = buildUserPrompt(input);
+    const after = buildUserPrompt(input);
+    expect(after).toBe(before);
+    expect(after).toContain("Use contractions.");
+    expect(after).toContain("Do not invent studies.");
+    expect(after).toContain("Keep it practical.");
+    expect(after).not.toContain("Classify this learning rule");
+    expect(after).not.toContain("classificationMismatch");
+    const result = await generateDraft(input, async () => "Wool in the booth at the CNE this week.");
+    expect(result.bundle).toBe(before);
+    expect(result.trace.selectedLearnings).toEqual([
+      expect.objectContaining({
+        id: "voice",
+        rule: "Use contractions.",
+        kind: "voice",
+        classificationSource: "heuristic",
+        classificationMismatch: false,
+      }),
+      expect.objectContaining({
+        id: "fact",
+        kind: "fact",
+        classificationSource: "separate_call",
+      }),
+      expect.objectContaining({
+        id: "unknown",
+        kind: "unknown",
+        classificationMismatch: true,
+      }),
+    ]);
   });
 
   it("counts trimmed facts and leaves architecture off when it was not asked", async () => {
