@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ProfileDesk } from "@/components/profile-desk";
@@ -25,13 +26,95 @@ export default async function ProfilePage({ params, searchParams }: Props) {
       listGenerationLogs(id),
       loadHealthReport(id, healthDays(days)),
     ]);
+    const surfaces = profile.surfaces.map((surface) => surface.label).join(" · ");
     return (
-      <main>
-        <p className="lede">{profile.description}</p>
-        <ProfileDesk profile={profile} golds={golds} learnings={learnings} />
-        <ProfileHealth profile={profile} report={health} />
-        <RecentGenerations profile={profile} logs={logs} />
-      </main>
+      <>
+        <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+          <div className="h-20 max-w-7xl mx-auto px-margin-mobile lg:px-margin-desktop flex items-center justify-between">
+            <div className="flex items-center gap-space-lg">
+              <Link
+                className="font-headline-md text-headline-md tracking-tight text-on-surface hover:text-primary transition-colors duration-200"
+                href="/"
+              >
+                Voice
+              </Link>
+            </div>
+            <nav className="flex items-center gap-space-lg">
+              <Link
+                className="font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface transition-colors duration-150"
+                href="/"
+              >
+                Projects
+              </Link>
+            </nav>
+          </div>
+        </header>
+        <main className="w-full pt-20 bg-background min-h-screen">
+          <div className="max-w-7xl mx-auto px-margin-mobile lg:px-margin-desktop py-space-xl">
+            <div className="flex flex-col w-full">
+              <div className="relative w-full">
+                <div className="absolute -top-16 left-1/4 w-96 h-96 bg-primary-container/10 rounded-full blur-3xl pointer-events-none -z-10" />
+                <div className="absolute top-[600px] -right-20 w-80 h-80 bg-primary/5 rounded-full blur-2xl pointer-events-none -z-10" />
+                <header className="w-full pb-space-xl">
+                  <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-space-lg pb-space-lg">
+                    <div>
+                      <div className="flex items-center gap-space-md mb-space-xs">
+                        <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">{profile.name}</h1>
+                        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-surface-container text-primary font-label-sm text-label-sm tracking-wider uppercase">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                          Active Model Calibration
+                        </span>
+                      </div>
+                      <p className="font-headline-sm text-headline-sm text-on-surface-variant italic">{profile.description}</p>
+                    </div>
+                    <div className="flex items-center gap-space-md self-start lg:self-end">
+                      <div className="px-space-md py-space-xs rounded-lg bg-surface-container-low flex items-center gap-space-md text-on-surface-variant font-code-md text-code-md">
+                        <span className="flex items-center gap-1.5 text-on-surface">
+                          <span className="material-symbols-outlined text-[15px] text-tertiary">layers</span>
+                          Surfaces: {surfaces}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </header>
+                <section className="w-full mb-space-xl">
+                  <div className="p-space-lg rounded-xl bg-surface-container-low shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+                    <div className="flex items-center gap-space-md">
+                      <div className="w-10 h-10 rounded-lg bg-primary-container/20 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-primary">eco</span>
+                      </div>
+                      <div>
+                        <span className="font-label-sm text-label-sm text-primary uppercase tracking-widest block mb-0.5">
+                          Core Directive
+                        </span>
+                        <p className="font-body-lg text-body-lg text-on-surface">{profile.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-space-sm shrink-0">
+                      <span className="font-code-md text-code-md text-outline">Profile ID: {profile.id}</span>
+                      <span className="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-label-sm text-secondary">
+                        Verified Origin
+                      </span>
+                    </div>
+                  </div>
+                </section>
+                <ProfileDesk profile={profile} golds={golds} learnings={learnings} />
+                <ProfileHealth profile={profile} report={health} />
+                <RecentGenerations profile={profile} logs={logs} />
+              </div>
+            </div>
+          </div>
+        </main>
+        <footer className="w-full bg-surface-container-lowest">
+          <div className="max-w-7xl mx-auto px-margin-mobile lg:px-margin-desktop py-space-xl flex flex-col sm:flex-row items-center justify-between gap-space-md">
+            <div className="flex items-center gap-space-sm">
+              <span className="font-headline-sm text-headline-sm text-on-surface-variant">Voice</span>
+              <span className="font-label-sm text-label-sm text-outline tracking-wider uppercase">— Cadence & Prose</span>
+            </div>
+            <div className="font-code-md text-code-md text-outline">© 2025 Voice Editorial System. Preserving focus.</div>
+          </div>
+        </footer>
+      </>
     );
   } catch {
     notFound();

@@ -188,7 +188,7 @@ function goldReason(
     | undefined,
   options: { query: string; architecture: string; untypedFallback: boolean },
 ): string {
-  if (gold?.canonical) return "Canonical example for this surface.";
+  if (gold?.canonical) return "Gold example for this surface.";
   const matchesType = Boolean(options.architecture) && (gold?.architecture ?? "").trim() === options.architecture;
   if (options.untypedFallback) {
     return "No example for this post type, so this untyped one was used.";

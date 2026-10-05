@@ -24,8 +24,20 @@ describe("ProfileHealth", () => {
   it("says when the period has no generations", () => {
     render(<ProfileHealth profile={profile} report={buildHealthReport([], { days: 14 })} />);
     expect(screen.getByRole("heading", { name: "Health" })).toBeInTheDocument();
-    expect(screen.getByText("No generations in this period.")).toBeInTheDocument();
-    expect(screen.queryByText("Surfaces needing attention")).not.toBeInTheDocument();
+    expect(screen.getByText("Generations").parentElement).toHaveTextContent("0");
+    expect(screen.getByText("Kept").parentElement).toHaveTextContent("0");
+    expect(screen.getByText("Edited").parentElement).toHaveTextContent("0");
+    expect(screen.getByText("Rejected").parentElement).toHaveTextContent("0");
+    expect(screen.getByText("Pending").parentElement).toHaveTextContent("0");
+    expect(screen.getByText("Retries").parentElement).toHaveTextContent("0 (0%)");
+    for (const heading of ["Top Surfaces", "Top Warnings", "Retries Audit", "Top Learnings", "Top Golds", "Possible Claim Issues"]) {
+      expect(screen.getByRole("heading", { name: new RegExp(heading) })).toBeInTheDocument();
+    }
+    expect(screen.getByText("By surface: —")).toBeInTheDocument();
+    expect(screen.getByText("By model: —")).toBeInTheDocument();
+    expect(screen.getByText("By reason: —")).toBeInTheDocument();
+    expect(screen.getAllByText("0 uses · 0 kept · 0 edited · 0 rejected · 0%")).toHaveLength(2);
+    expect(screen.queryByText("No generations in this period.")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Last 14 days" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Last 7 days" })).toHaveAttribute("href", "?days=7");
     expect(screen.getByRole("link", { name: "Last 30 days" })).toHaveAttribute("href", "?days=30");
@@ -47,20 +59,18 @@ describe("ProfileHealth", () => {
       },
     ];
     render(<ProfileHealth profile={profile} report={buildHealthReport(logs, { days: 7 })} />);
-    expect(screen.getByText("1 generation")).toBeInTheDocument();
-    expect(screen.getByText("1 kept")).toBeInTheDocument();
-    expect(screen.getByText("0 edited")).toBeInTheDocument();
-    expect(screen.getByText("0 rejected")).toBeInTheDocument();
-    expect(screen.getByText("0 pending")).toBeInTheDocument();
-    expect(screen.getByText("0 retries · 0%")).toBeInTheDocument();
-    expect(screen.getByText("Top warning: none")).toBeInTheDocument();
-    expect(screen.getByText("Most edits and rejections: none")).toBeInTheDocument();
-    expect(screen.queryByText(/Most retries:/)).not.toBeInTheDocument();
-    expect(screen.getByText("No warnings in this period.")).toBeInTheDocument();
-    expect(screen.getByText("No retries in this period.")).toBeInTheDocument();
-    expect(screen.getByText("No learnings in this period.")).toBeInTheDocument();
-    expect(screen.getByText("No gold examples in this period.")).toBeInTheDocument();
-    expect(screen.getByText("No claim-related warnings or notes in this period.")).toBeInTheDocument();
+    expect(screen.getByText("Generations").parentElement).toHaveTextContent("1");
+    expect(screen.getByText("Kept").parentElement).toHaveTextContent("1");
+    expect(screen.getByText("Edited").parentElement).toHaveTextContent("0");
+    expect(screen.getByText("Rejected").parentElement).toHaveTextContent("0");
+    expect(screen.getByText("Pending").parentElement).toHaveTextContent("0");
+    expect(screen.getByText("Retries").parentElement).toHaveTextContent("0 (0%)");
+    expect(screen.getByRole("heading", { name: /Top Warnings/ }).closest("article")).toHaveTextContent("—");
+    expect(screen.getByText("By surface: —")).toBeInTheDocument();
+    expect(screen.getByText("By model: —")).toBeInTheDocument();
+    expect(screen.getByText("By reason: —")).toBeInTheDocument();
+    expect(screen.getAllByText("0 uses · 0 kept · 0 edited · 0 rejected · 0%")).toHaveLength(2);
+    expect(screen.getByRole("heading", { name: /Possible Claim Issues/ }).closest("article")).toHaveTextContent("—");
     expect(screen.getAllByText("Correlation, not proof.")).toHaveLength(2);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Last 7 days" })).toHaveAttribute("aria-current", "page");
@@ -119,28 +129,20 @@ describe("ProfileHealth", () => {
       />,
     );
 
-    expect(screen.getByText("3 generations")).toBeInTheDocument();
-    expect(screen.getByText("2 retries · 67%")).toBeInTheDocument();
-    expect(screen.getByText("Top warning: unsupported claim")).toBeInTheDocument();
-    expect(screen.getByText("Most edits and rejections: Blog (1)")).toBeInTheDocument();
-    expect(screen.getByText("Most retries: claude-opus-4-6 (1)")).toBeInTheDocument();
-    expect(
-      screen.getByText("Blog — 2 generations · 1 edited · 0 rejected · 50% edited or rejected · 1 retries · Top warning: unsupported claim"),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/shop_faq — 1 generations · 0 edited · 1 rejected/)).toBeInTheDocument();
-    expect(screen.getByText(/unsupported claim — 2 · Blog, shop_faq · 2 retries · Oct 3, 3:00 PM/)).toBeInTheDocument();
-    expect(screen.getByText("2 retries · 67% of generations")).toBeInTheDocument();
-    expect(screen.getByText("By surface: Blog 1 · shop_faq 1")).toBeInTheDocument();
-    expect(screen.getByText("By model: claude-opus-4-6 1 · gpt-4o 1")).toBeInTheDocument();
-    expect(screen.getByText("By reason: banned_phrase:delve 2")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Do not claim wool pellets kill all slugs · fact — 2 uses · 0 kept · 1 edited · 1 rejected · 0 pending · 50%",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("How to · Blog · how-to-steps — 2 uses · 0 kept · 1 edited · 1 rejected · 0 pending · 50%"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Generations").parentElement).toHaveTextContent("3");
+    expect(screen.getByText("Retries").parentElement).toHaveTextContent("2 (67%)");
+    expect(screen.getByText("1 edited · 0 rejected · 1 retries · unsupported claim")).toBeInTheDocument();
+    expect(screen.getByText("0 edited · 1 rejected · 1 retries · unsupported claim")).toBeInTheDocument();
+    expect(screen.getByText(/Blog, shop_faq · 2 retries · Oct 3, 3:00 PM/)).toBeInTheDocument();
+    expect(screen.getByText("By surface: Blog")).toBeInTheDocument();
+    expect(screen.getByText("By surface: shop_faq")).toBeInTheDocument();
+    expect(screen.getByText("By model: claude-opus-4-6")).toBeInTheDocument();
+    expect(screen.getByText("By model: gpt-4o")).toBeInTheDocument();
+    expect(screen.getByText("By reason: banned_phrase:delve")).toBeInTheDocument();
+    expect(screen.getByText("Do not claim wool pellets kill all slugs")).toBeInTheDocument();
+    expect(screen.getByText("fact · 2 uses · 0 kept · 1 edited · 1 rejected · 0 pending · 50%")).toBeInTheDocument();
+    expect(screen.getByText("How to")).toBeInTheDocument();
+    expect(screen.getByText("Blog · how-to-steps · 2 uses · 0 kept · 1 edited · 1 rejected · 0 pending · 50%")).toBeInTheDocument();
     expect(screen.getAllByText("Correlation, not proof.")).toHaveLength(2);
     const claimLinks = screen.getAllByRole("link", { name: "g-edit" });
     expect(claimLinks.length).toBeGreaterThan(0);
@@ -177,9 +179,9 @@ describe("ProfileHealth", () => {
         )}
       />,
     );
-    expect(screen.getByText("By surface: Blog 1")).toBeInTheDocument();
-    expect(screen.getByText("No model on these retries.")).toBeInTheDocument();
-    expect(screen.getByText("No retry reason recorded.")).toBeInTheDocument();
+    expect(screen.getByText("By surface: Blog")).toBeInTheDocument();
+    expect(screen.getByText("By model: —")).toBeInTheDocument();
+    expect(screen.getByText("By reason: —")).toBeInTheDocument();
     expect(screen.queryByText(/Most retries:/)).not.toBeInTheDocument();
   });
 
@@ -202,6 +204,6 @@ describe("ProfileHealth", () => {
       { days: 14 },
     );
     render(<ProfileHealth profile={profile} report={{ ...report, surfaces: [] }} />);
-    expect(screen.getByText("No surfaces in this period.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Top Surfaces/ }).closest("article")).toHaveTextContent("—");
   });
 });

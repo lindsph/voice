@@ -50,8 +50,21 @@ describe("RecentGenerations", () => {
 
   it("says when nothing has been logged", () => {
     render(<RecentGenerations profile={profile} logs={[]} />);
-    expect(screen.getByText("WoolGrown — Recent generations")).toBeInTheDocument();
-    expect(screen.getByText("No drafts logged yet.")).toBeInTheDocument();
+    expect(screen.getByText("Recent generations")).toBeInTheDocument();
+    expect(screen.getByText("0 Generations Logged")).toBeInTheDocument();
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+    expect(screen.getByText("The edit")).toBeInTheDocument();
+    expect(screen.getByText("What was used")).toBeInTheDocument();
+    expect(screen.getByText("Warnings: —")).toBeInTheDocument();
+    expect(screen.getByText("Retried: 0")).toBeInTheDocument();
+    expect(screen.getByText("0 chars")).toBeInTheDocument();
+    expect(screen.getByText(/Golds:/)).toHaveTextContent("—");
+    expect(screen.getByText(/Rules:/)).toHaveTextContent("—");
+    expect(screen.getByText("Note")).toBeInTheDocument();
+    expect(screen.queryByText("No drafts logged yet.")).not.toBeInTheDocument();
+    for (const name of ["Kept", "Edited", "Rejected", "Save edit"]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
   });
 
   it("shows the draft, then saves a kept mark with a note", async () => {
@@ -62,10 +75,14 @@ describe("RecentGenerations", () => {
     render(<RecentGenerations profile={profile} logs={[log]} timeZone="America/New_York" />);
     expect(document.getElementById("generation-log-1")).toBeTruthy();
     expect(screen.getByText("Oct 5, 9:28 AM · Blog · how-to-steps · Claude Opus 4.6")).toBeInTheDocument();
-    expect(screen.getByText("Outcome: Pending")).toBeInTheDocument();
+    expect(screen.getByText("Pending")).toBeInTheDocument();
     expect(screen.getByText("Warnings: none")).toBeInTheDocument();
     expect(screen.getByText("Retried: no")).toBeInTheDocument();
     expect(screen.getByText("Wire planters dry out quickly.")).toBeInTheDocument();
+    expect(screen.getByText("The edit")).toBeInTheDocument();
+    expect(screen.getByText("25 chars")).toBeInTheDocument();
+    expect(screen.getByText("woolgrown-howto")).toBeInTheDocument();
+    expect(screen.getByText("tl-123")).toBeInTheDocument();
     expect(screen.queryByText("Your edit")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText("Too certain about pest benefits."), {
@@ -104,12 +121,12 @@ describe("RecentGenerations", () => {
         timeZone="America/New_York"
       />,
     );
-    expect(screen.getByText("Outcome: Edited")).toBeInTheDocument();
-    expect(screen.getByText("Warnings: delve")).toBeInTheDocument();
-    expect(screen.getByText("Retried: yes · banned phrase “delve”")).toBeInTheDocument();
+    expect(screen.getAllByText("Edited").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Warnings:\s*delve/)).toBeInTheDocument();
+    expect(screen.getByText(/Retried:\s*yes · banned phrase “delve”/)).toBeInTheDocument();
     expect(screen.getByText("Wire planters and hanging baskets dry out fast.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edited" }));
+    fireEvent.click(screen.getByRole("button", { name: /Edited/ }));
     fireEvent.change(screen.getByRole("textbox", { name: "Your edit" }), {
       target: { value: "A shorter line." },
     });

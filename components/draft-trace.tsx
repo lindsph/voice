@@ -42,7 +42,7 @@ function CountLine({
           {items.map((item) => (
             <li key={item.key}>
               {item.title}
-              {item.detail ? <span className="trace-reason">{item.detail}</span> : null}
+              {item.detail ? <span>{item.detail}</span> : null}
             </li>
           ))}
         </ul>
@@ -62,10 +62,12 @@ export function DraftTracePanel({
 }) {
   const surface = profile.surfaces.find((item) => item.id === trace.surfaceId);
   return (
-    <details className="trace">
-      <summary>Why this draft?</summary>
-      <ul>
-        <li>
+    <details open className="pb-space-md">
+      <summary className="flex items-center justify-between pb-space-md font-label-lg text-label-lg text-on-surface tracking-wide uppercase">
+        Why this draft?
+      </summary>
+      <ul className="grid grid-cols-2 md:grid-cols-4 gap-space-sm mb-space-lg">
+        <li className="p-space-sm rounded bg-surface-container-lowest">
           {profile.name} · {surface?.label ?? trace.surfaceId}
         </li>
         <li>

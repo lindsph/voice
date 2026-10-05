@@ -8,6 +8,12 @@ export default async function HomePage() {
   const profiles = await listProfiles();
 
   return (
+    <div className="app-shell">
+      <header className="topbar">
+        <Link className="brand" href="/">
+          Voice
+        </Link>
+      </header>
     <main>
       <p className="lede">
         One teacher. Separate mouths. Work on voice here; lindsay-assistant and
@@ -24,5 +30,6 @@ export default async function HomePage() {
         ))}
       </ul>
     </main>
+    </div>
   );
 }

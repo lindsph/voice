@@ -415,7 +415,7 @@ Wire planters and hanging baskets dry out fast.
         facts: "raised bed",
         golds: [gold({ canonical: true })],
       }).golds[0]?.reason,
-    ).toBe("Canonical example for this surface.");
+    ).toBe("Gold example for this surface.");
 
     expect(
       collectToneSelection({

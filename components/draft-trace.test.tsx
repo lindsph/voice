@@ -35,7 +35,7 @@ function trace(over: Partial<DraftTrace> = {}): DraftTrace {
       {
         id: "woolgrown-howto",
         title: "How to",
-        reason: "Canonical example for this surface.",
+        reason: "Gold example for this surface.",
       },
       {
         id: "woolgrown-uncertainty",
@@ -79,7 +79,7 @@ describe("DraftTracePanel", () => {
     panel({}, ["delve"]);
     const why = screen.getByText("Why this draft?").closest("details");
     expect(why).not.toBeNull();
-    expect(why).not.toHaveAttribute("open");
+    expect(why).toHaveAttribute("open");
     const view = within(why!);
     expect(view.getByText("WoolGrown · Blog")).toBeInTheDocument();
     expect(view.getByText("Facts: 812 characters")).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe("DraftTracePanel", () => {
     expect(view.getByText("Retry: banned phrase “delve”")).toBeInTheDocument();
     expect(view.getByText("Warnings: delve")).toBeInTheDocument();
     expect(view.getByText("How to")).toBeInTheDocument();
-    expect(view.getByText("Canonical example for this surface.")).toBeInTheDocument();
+    expect(view.getByText("Gold example for this surface.")).toBeInTheDocument();
     expect(view.getByText("Name the bed.")).toBeInTheDocument();
     expect(view.getByText("guaranteed")).toBeInTheDocument();
   });

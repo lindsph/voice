@@ -23,7 +23,7 @@ const trace: DraftTrace = {
     {
       id: "woolgrown-howto",
       title: "How to",
-      reason: "Canonical example for this surface.",
+      reason: "Gold example for this surface.",
     },
   ],
   selectedLearnings: [

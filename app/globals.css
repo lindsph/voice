@@ -1,124 +1,39 @@
-:root {
-  --bg: #f6f1e8;
-  --ink: #3f3429;
-  --muted: #9a8f82;
-  --paper: #fffcf7;
-  --line: #e7e0d5;
-  --accent: #5a4c3c;
-  --good: #2c4a45;
-  --bad: #8a3b2d;
-}
-
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  min-height: 100%;
-}
-
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  font-size: 15px;
-  line-height: 1.5;
-}
-
-a { color: inherit; text-decoration: none; }
-
-button, input, select, textarea { font: inherit; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 .app-shell {
-  max-width: 1100px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 32px 36px 88px;
+  padding: 28px 24px 80px;
 }
 
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 36px;
+.app-shell .topbar { margin-bottom: 36px; }
+
+.app-shell .brand {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.75rem;
+  letter-spacing: -0.02em;
 }
 
-.brand {
-  font-family: "Iowan Old Style", Palatino, Georgia, serif;
-  font-size: 2rem;
-  font-weight: 400;
-}
-
-.lede {
+.app-shell .lede {
   margin: 0 0 28px;
-  color: var(--muted);
-  max-width: 42rem;
+  max-width: 40rem;
+  color: #d8c3ad;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.35rem;
+  line-height: 1.35;
 }
 
-.grid { display: grid; gap: 16px; }
-
-@media (min-width: 780px) {
-  .grid-2 { grid-template-columns: 1.15fr 0.85fr; }
+.app-shell .card {
+  background: #1a1b21;
+  border-radius: 16px;
+  padding: 22px;
 }
 
-.card {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 18px;
-}
+.app-shell .meta { margin: 0; color: #a08e7a; }
 
-.card h2 { margin: 0 0 8px; font-size: 1.1rem; }
-
-.meta { margin: 0; color: var(--muted); }
-
-label {
-  display: grid;
-  gap: 6px;
-  margin-top: 12px;
-  font-size: 0.92rem;
-  color: var(--muted);
-}
-
-input, select, textarea {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: #fff;
-  color: var(--ink);
-}
-
-textarea { min-height: 160px; resize: vertical; }
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-button.primary, button.ghost {
-  border-radius: 999px;
-  border: 1px solid var(--ink);
-  background: var(--ink);
-  color: var(--paper);
-  padding: 8px 16px;
-  cursor: pointer;
-}
-
-button.ghost {
-  background: transparent;
-  color: var(--ink);
-}
-
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.quote {
-  margin: 12px 0 0;
-  padding-left: 14px;
-  border-left: 3px solid var(--accent);
-}
-
-.learnings, .profile-list {
+.app-shell .profile-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -126,90 +41,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   gap: 12px;
 }
 
-.learnings li, .profile-list li {
-  display: grid;
-  gap: 8px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
-}
-
-.trace {
-  margin-top: 14px;
-  font-size: 0.92rem;
-}
-
-.trace summary { cursor: pointer; }
-
-.trace ul {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.trace li details ul { margin-left: 14px; }
-
-.trace-reason {
-  display: block;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.recent-generations { margin-top: 16px; }
-
-.health { margin-top: 16px; }
-.health h3 { margin: 16px 0 6px; font-size: 0.98rem; }
-.health-range { display: flex; gap: 12px; margin: 0 0 10px; }
-.health-range a[aria-current="page"] { font-weight: 650; }
-.health-metrics, .health-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.health-metrics { display: flex; flex-wrap: wrap; gap: 8px 14px; }
-.health-metrics li { margin: 0; }
-.health-list { display: grid; gap: 6px; }
-.health-list li { margin: 0; }
-
-.generation-list {
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-  display: grid;
-  gap: 18px;
-}
-
-.generation-list li {
-  display: grid;
-  gap: 4px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.generation-list li p { margin: 0; }
-
-.generation-label {
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.generation-body {
-  white-space: pre-wrap;
-  max-height: 9rem;
-  overflow: auto;
-}
-
-.generation-list details { margin-top: 6px; }
-.generation-list summary { cursor: pointer; color: var(--muted); }
-
-.tone-doc { font-size: 0.98rem; }
-.tone-doc h1 { font-size: 1.6rem; }
-.tone-doc table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-.tone-doc td, .tone-doc th {
-  border-bottom: 1px solid var(--line);
-  padding: 8px 6px;
-  text-align: left;
-  vertical-align: top;
+.app-shell .profile-list h2 {
+  margin: 0 0 6px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.8rem;
+  font-weight: 500;
 }

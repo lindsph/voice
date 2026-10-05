@@ -294,7 +294,7 @@ describe("generateDraft slop retry", () => {
       expect.arrayContaining(["guaranteed", "delve"]),
     );
     expect(result.trace.selectedGolds.find((gold) => gold.id === "woolgrown-howto")?.reason).toMatch(
-      /Canonical example/,
+      /Gold example/,
     );
     expect(result.trace.selectedLearnings[0]?.reason).toMatch(/Same surface/);
     expect(result.bundle).toContain("How to");
