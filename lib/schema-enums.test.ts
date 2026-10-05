@@ -14,8 +14,10 @@ import { buildUserPrompt } from "./generate";
 import { retrieveLearnings } from "./retrieve";
 import {
   generationOutcomeSchema,
+  generationReviewSchema,
   goldSchema,
   learningSchema,
+  learnInputSchema,
   type Profile,
 } from "./types";
 
@@ -60,6 +62,36 @@ describe("schema enums", () => {
 
   it("rejects an invalid learning kind", () => {
     expect(learningSchema.safeParse({ ...learning, kind: "accuracy" }).success).toBe(false);
+  });
+
+  it("rejects invalid enum values in Zod before a database write", () => {
+    const write = () => {
+      throw new Error("Prisma should not be called");
+    };
+    const gate = (parsed: { success: boolean }) => {
+      if (parsed.success) write();
+      return parsed.success;
+    };
+
+    expect(gate(learnInputSchema.safeParse({ kind: "accuracy" }))).toBe(false);
+    expect(gate(learningSchema.safeParse({ ...learning, kind: "accuracy" }))).toBe(false);
+    expect(gate(learningSchema.safeParse({ ...learning, status: "maybe" }))).toBe(false);
+    expect(gate(goldSchema.safeParse({
+      id: "g1",
+      profileId: "woolgrown",
+      title: "How to",
+      body: "Lead with the answer.",
+      source: "taught",
+      surface: "blog",
+      canonical: true,
+      status: "maybe",
+      createdAt: "2026-10-05T00:00:00.000Z",
+    }))).toBe(false);
+    expect(
+      gate(learningSchema.safeParse({ ...learning, classificationSource: "gpt" })),
+    ).toBe(false);
+    expect(gate(generationOutcomeSchema.safeParse("approved"))).toBe(false);
+    expect(gate(generationReviewSchema.safeParse({ outcome: "approved" }))).toBe(false);
   });
 
   it("rejects an invalid classification source", () => {
