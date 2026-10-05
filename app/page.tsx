@@ -1,35 +1,13 @@
-import Link from "next/link";
-
+import { HomeDesk } from "@/components/home-desk";
+import { healthDays, loadHealthReport } from "@/lib/health";
 import { listProfiles } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+export default async function HomePage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
+  const { days } = await searchParams;
+  const windowDays = healthDays(days);
   const profiles = await listProfiles();
-
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <Link className="brand" href="/">
-          Voice
-        </Link>
-      </header>
-    <main>
-      <p className="lede">
-        One teacher. Separate mouths. Work on voice here; lindsay-assistant and
-        WoolGrown call it when they draft.
-      </p>
-      <ul className="profile-list">
-        {profiles.map((profile) => (
-          <li key={profile.id} className="card">
-            <h2>
-              <Link href={`/${profile.id}`}>{profile.name}</Link>
-            </h2>
-            <p className="meta">{profile.description}</p>
-          </li>
-        ))}
-      </ul>
-    </main>
-    </div>
-  );
+  const reports = await Promise.all(profiles.map((profile) => loadHealthReport(profile.id, windowDays)));
+  return <HomeDesk cards={profiles.map((profile, index) => ({ profile, report: reports[index]! }))} />;
 }
