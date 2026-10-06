@@ -8,6 +8,7 @@ import {
   isLearningKind,
   resolveLearningKind,
 } from "./learning-kind";
+import { goldTitleFromPassage, herWritingSource } from "./her-writing";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
 import type { DraftTrace, Gold, GoldUpdate, Learning, Profile, Surface } from "./types";
 
@@ -319,6 +320,53 @@ export async function learnForProfile(input: {
     keptGold,
     learnings: await listLearnings(input.profileId),
   };
+}
+
+export async function addHerWriting(input: {
+  profileId: string;
+  passages: string[];
+  sourceTitle: string;
+  surface: string;
+}): Promise<{ added: number; skipped: number }> {
+  const profile = await getProfile(input.profileId);
+  const surface = input.surface.trim();
+  if (!profile.surfaces.some((item) => item.id === surface)) {
+    throw new Error("Pick a surface.");
+  }
+  const source = herWritingSource(input.sourceTitle);
+  const existing = await prisma.gold.findMany({
+    where: { profileId: input.profileId, status: "active" },
+    select: { body: true },
+  });
+  const seen = new Set(existing.map((gold) => gold.body.trim()));
+  const stamp = new Date();
+  let added = 0;
+  let skipped = 0;
+  for (const passage of input.passages) {
+    const body = passage.trim();
+    if (!body || seen.has(body)) {
+      skipped += 1;
+      continue;
+    }
+    seen.add(body);
+    await prisma.gold.create({
+      data: {
+        id: uniqueId("her", input.profileId, String(added + 1)),
+        profileId: input.profileId,
+        title: goldTitleFromPassage(body),
+        body,
+        rejected: "",
+        source,
+        surface,
+        architecture: "",
+        canonical: false,
+        status: "active",
+        createdAt: stamp,
+      },
+    });
+    added += 1;
+  }
+  return { added, skipped };
 }
 
 export async function dismissLearning(id: string): Promise<Learning> {

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { DraftTracePanel } from "@/components/draft-trace";
+import { HerWritingForm } from "@/components/her-writing-form";
 import { calibrationDocument } from "@/lib/calibration-doc";
 import type { DraftTrace, Gold, Learning, Profile } from "@/lib/types";
 
@@ -157,17 +158,16 @@ export function ProfileDesk({ profile, golds, learnings, draftCounts = {} }: Pro
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-space-md">
           <div className="p-space-lg rounded-xl bg-surface-container-low shadow-sm flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-space-sm">
+              <div className="flex items-center justify-between mb-space-sm min-h-8">
                 <label className="font-label-lg text-label-lg text-primary uppercase tracking-wider" htmlFor="facts-input">
                   Facts
                 </label>
                 <span className="font-code-md text-code-md text-outline">{facts.length} chars</span>
               </div>
               <textarea
-                className="w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-lg p-space-md focus:outline-none placeholder:text-outline-variant resize-none"
+                className="h-44 w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-lg p-space-md focus:outline-none placeholder:text-outline-variant resize-none"
                 id="facts-input"
                 placeholder="Only what the model is allowed to know."
-                rows={5}
                 value={facts}
                 onChange={(event) => setFacts(event.target.value)}
               />
@@ -175,7 +175,7 @@ export function ProfileDesk({ profile, golds, learnings, draftCounts = {} }: Pro
           </div>
           <div className="p-space-lg rounded-xl bg-surface-container-low shadow-sm flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-space-sm">
+              <div className="flex items-center justify-between mb-space-sm min-h-8">
                 <label className="font-label-lg text-label-lg text-secondary uppercase tracking-wider" htmlFor="draft-input">
                   Draft Output
                 </label>
@@ -184,9 +184,8 @@ export function ProfileDesk({ profile, golds, learnings, draftCounts = {} }: Pro
                 </span>
               </div>
               <textarea
-                className="w-full bg-surface-container-lowest text-on-surface font-body-lg text-body-lg rounded-lg p-space-md focus:outline-none placeholder:text-outline-variant resize-none selection:bg-primary-container/30"
+                className="h-44 w-full bg-surface-container-lowest text-on-surface font-body-lg text-body-lg rounded-lg p-space-md focus:outline-none placeholder:text-outline-variant resize-none selection:bg-primary-container/30"
                 id="draft-input"
-                rows={5}
                 value={body}
                 onChange={(event) => setBody(event.target.value)}
               />
@@ -269,6 +268,7 @@ export function ProfileDesk({ profile, golds, learnings, draftCounts = {} }: Pro
           </div>
         </div>
       </section>
+      <HerWritingForm profile={profile} />
       <GoldsLibrary
         golds={golds.map((gold) => goldEdits[gold.id] ?? gold)}
         profile={profile}

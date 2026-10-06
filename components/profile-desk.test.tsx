@@ -224,6 +224,19 @@ describe("ProfileDesk page sections", () => {
     expect(screen.getByText("0 Active Tuning Heuristics")).toBeInTheDocument();
     expect(screen.getByText("A real edit becomes one preference you can read. Tiny fixes do not teach.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Dismiss" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Add her writing" })).toBeInTheDocument();
+  });
+
+  it("keeps the facts and draft boxes the same height", () => {
+    render(<ProfileDesk profile={profile} golds={[]} learnings={[]} />);
+    const facts = screen.getByLabelText("Facts");
+    const draft = screen.getByLabelText("Draft Output");
+    expect(facts).toHaveClass("h-44");
+    expect(draft).toHaveClass("h-44");
+    expect(facts).not.toHaveAttribute("rows");
+    expect(draft).not.toHaveAttribute("rows");
+    expect(facts.previousElementSibling).toHaveClass("min-h-8");
+    expect(draft.previousElementSibling).toHaveClass("min-h-8");
   });
 
   it("switches surface, counts facts, teaches, and dismisses a learning", async () => {
