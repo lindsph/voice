@@ -1,7 +1,17 @@
 import { BLOG_SHAPE_INSTRUCTION, blogDraftIssues, blogProse } from "./blog-shape";
 import { collectToneSelection, formatToneBundle, type ToneBundleInput } from "./bundle";
+import {
+  parseShopifyHeadline,
+  SHOPIFY_HEADLINE_INSTRUCTION,
+  SHOPIFY_HEADLINE_TASK,
+  ShopifyHeadlineRejected,
+  shopifyHeadlineBody,
+  type ShopifyHeadlineTask,
+} from "./shopify-headline";
 import { lintDraft } from "./slop";
 import type { DraftTrace, Profile } from "./types";
+
+export { ShopifyHeadlineRejected };
 
 export { bannedHits } from "./slop";
 
@@ -34,9 +44,36 @@ export function buildUserPrompt(input: {
   learnings: ToneBundleInput["learnings"];
   architecture?: string;
   format?: "blog" | "plain";
+  task?: ShopifyHeadlineTask;
   retryContext?: string;
 }): string {
   const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
+  if (input.task === SHOPIFY_HEADLINE_TASK) {
+    return [
+      `Write for the “${input.profile.name}” voice.`,
+      "",
+      "Facts (the saved draft — do not invent beyond this):",
+      input.facts.trim(),
+      "",
+      formatToneBundle({
+        guide: input.profile.guide,
+        bannedForPrompt: input.profile.bannedForPrompt,
+        surface: undefined,
+        surfaceId: input.surfaceId,
+        seed: input.seed,
+        facts: input.facts,
+        profileId: input.profile.id,
+        architecture: input.architecture,
+        golds: input.golds,
+        learnings: input.learnings,
+      }),
+      ...(input.retryContext
+        ? ["", "Previous draft failed a standing rule. Rewrite from scratch and fix:", input.retryContext]
+        : []),
+      "",
+      SHOPIFY_HEADLINE_INSTRUCTION,
+    ].join("\n");
+  }
   const blogShape = input.format === "blog" || input.surfaceId === "blog";
   return [
     `Write for the “${input.profile.name}” voice.`,
@@ -74,9 +111,22 @@ function draftHits(
     profile: Profile;
     surfaceId: string;
     format?: "blog" | "plain";
+    task?: ShopifyHeadlineTask;
   },
 ): string[] {
   const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
+  if (input.task === SHOPIFY_HEADLINE_TASK) {
+    const headline = parseShopifyHeadline(body);
+    if (!headline) {
+      return ["Shopify headline must be one JSON object with a non-empty headline."];
+    }
+    return lintDraft({
+      body: headline,
+      banned: input.profile.bannedForPrompt,
+      surfaceId: input.surfaceId,
+      maxWords: null,
+    });
+  }
   const blogShape = input.format === "blog" || input.surfaceId === "blog";
   const prose = blogShape ? blogProse(body) : body;
   return [
@@ -164,6 +214,7 @@ export async function generateDraft(
     learnings: ToneBundleInput["learnings"];
     architecture?: string;
     format?: "blog" | "plain";
+    task?: ShopifyHeadlineTask;
     model?: string;
   },
   complete: ChatComplete,
@@ -172,7 +223,13 @@ export async function generateDraft(
   const first = unwrapDraft(await complete({ system: input.profile.systemPrompt, user }));
   const hits = draftHits(first, input);
   if (hits.length === 0) {
-    return { body: first, bundle: user, retried: false, warnings: [], trace: draftTrace(input, null) };
+    return {
+      body: headlineBody(input.task, first),
+      bundle: user,
+      retried: false,
+      warnings: [],
+      trace: draftTrace(input, null),
+    };
   }
   const second = unwrapDraft(
     await complete({
@@ -185,12 +242,19 @@ export async function generateDraft(
   );
   const body = second || first;
   return {
-    body,
+    body: headlineBody(input.task, body),
     bundle: user,
     retried: true,
     warnings: draftHits(body, input),
     trace: draftTrace(input, hits),
   };
+}
+
+function headlineBody(task: ShopifyHeadlineTask | undefined, body: string): string {
+  if (task !== SHOPIFY_HEADLINE_TASK) return body;
+  const headline = parseShopifyHeadline(body);
+  if (!headline) throw new ShopifyHeadlineRejected();
+  return shopifyHeadlineBody(headline);
 }
 
 export function isClaudeModel(model: string | undefined): boolean {

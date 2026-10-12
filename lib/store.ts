@@ -184,6 +184,7 @@ export async function generateForProfile(input: {
   seed?: string;
   architecture?: string;
   format?: "blog" | "plain";
+  task?: "shopify_headline";
   model?: string;
 }): Promise<{ body: string; retried: boolean; bundle: string; warnings: string[]; trace: DraftTrace }> {
   const corpus = await getBundle({
@@ -204,6 +205,7 @@ export async function generateForProfile(input: {
       learnings: corpus.learnings,
       architecture: input.architecture,
       format: input.format,
+      task: input.task,
       model,
     },
     (prompt) => completeDraft({ ...prompt, model }),

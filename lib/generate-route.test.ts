@@ -78,6 +78,7 @@ describe("POST /api/profiles/:id/generate", () => {
       seed: "raised-beds",
       architecture: "how-to-steps",
       format: undefined,
+      task: undefined,
       model: "claude-opus-4-6",
     });
   });

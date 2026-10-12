@@ -539,3 +539,109 @@ describe("model routing", () => {
     }
   });
 });
+
+const blogProfile: Profile = {
+  ...woolgrown,
+  surfaces: [
+    {
+      id: "blog",
+      label: "Blog",
+      maxWords: null,
+      hint: "Shop blog draft. Lead, then sections, then a short FAQ, then one soft CTA.",
+    },
+  ],
+};
+
+const validBlog = JSON.stringify({
+  title: "Leftover Wool Has a Job",
+  lead: "Wool pellets hold moisture in the pot. Water them in and let them work through the season.",
+  sections: [
+    { heading: "Mix", body: "Mix the pellets into the top of the bed, then water." },
+    { heading: "Wait", body: "Let the wool work through the season without extra feed." },
+  ],
+  faq: [
+    { question: "How much?", answer: "About half a cup in a small pot." },
+    { question: "How often?", answer: "Once at planting is enough for the season." },
+    { question: "Safe?", answer: "They are a garden input, not a snack." },
+  ],
+  cta: "WoolGrown pellets are on the shop when you are ready to try a bed.",
+});
+
+describe("shopify headline task", () => {
+  it("asks for one headline and skips the blog shape and the no-title line", async () => {
+    let user = "";
+    const result = await generateDraft(
+      {
+        ...draftInput(blogProfile, "blog"),
+        task: "shopify_headline",
+        architecture: "how-to-steps",
+        facts: "The scraps became sauna hats and garden beds.",
+        golds: [
+          {
+            id: "howto",
+            title: "How to",
+            body: "Mix the pellets in, then water.",
+            surface: "blog",
+            canonical: true,
+            profileId: "woolgrown",
+            architecture: "how-to-steps",
+          },
+          {
+            id: "other-arch",
+            title: "Proof",
+            body: "This proof story should stay out.",
+            surface: "blog",
+            canonical: false,
+            profileId: "woolgrown",
+            architecture: "proof-story",
+          },
+          {
+            id: "social-gold",
+            title: "Caption",
+            body: "This caption should stay out.",
+            surface: "social",
+            canonical: true,
+            profileId: "woolgrown",
+          },
+        ],
+      },
+      async ({ user: prompt }) => {
+        user = prompt;
+        return JSON.stringify({ headline: "  Leftover wool has a job  " });
+      },
+    );
+    expect(user).toContain('{"headline":"one reader-facing Shopify headline"}');
+    expect(user).toContain("The scraps became sauna hats and garden beds.");
+    expect(user).toContain("Mix the pellets in, then water.");
+    expect(user).not.toContain("This proof story should stay out.");
+    expect(user).not.toContain("This caption should stay out.");
+    expect(user).not.toContain("Shape of the post");
+    expect(user).not.toContain("Lead, then sections");
+    expect(user).not.toContain("no title");
+    expect(result.body).toBe(JSON.stringify({ headline: "Leftover wool has a job" }));
+    expect(result.retried).toBe(false);
+  });
+
+  it("rejects a full article instead of reading its title", async () => {
+    await expect(
+      generateDraft(
+        { ...draftInput(blogProfile, "blog"), task: "shopify_headline" },
+        async () => validBlog,
+      ),
+    ).rejects.toThrow(/non-empty headline/);
+  });
+
+  it("keeps the full blog instruction when format is plain on the blog surface", async () => {
+    let user = "";
+    await generateDraft(
+      { ...draftInput(blogProfile, "blog"), format: "plain" },
+      async ({ user: prompt }) => {
+        user = prompt;
+        return validBlog;
+      },
+    );
+    expect(user).toContain("Shape of the post");
+    expect(user).toContain("Lead, then sections");
+    expect(user).not.toContain("no title");
+  });
+});

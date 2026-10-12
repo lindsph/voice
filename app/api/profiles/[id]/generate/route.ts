@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authorize } from "@/lib/auth";
+import { ShopifyHeadlineRejected } from "@/lib/generate";
 import { generateForProfile } from "@/lib/store";
 import { generateInputSchema } from "@/lib/types";
 
@@ -22,10 +23,14 @@ export async function POST(request: Request, { params }: Props) {
       seed: input.seed,
       architecture: input.architecture,
       format: input.format,
+      task: input.task,
       model: input.model,
     });
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof ShopifyHeadlineRejected) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     const message = error instanceof Error ? error.message : "Could not generate";
     const missing =
       message.includes("OPENAI_API_KEY") || message.includes("ANTHROPIC_API_KEY");
