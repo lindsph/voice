@@ -1,10 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildUserPrompt,
   completeDraft,
   completeWithAnthropic,
+  CLAUDE_DRAFT_TIMEOUT_MS,
   DRAFT_MODEL,
+  DRAFT_TIMEOUT_MS,
   formatRetryReason,
   generateDraft,
   anthropicDraftBody,
@@ -456,6 +462,16 @@ describe("unwrapDraft", () => {
 });
 
 describe("model routing", () => {
+  it("gives Claude blog drafts 4 minutes and leaves short notes at 45 seconds", () => {
+    expect(CLAUDE_DRAFT_TIMEOUT_MS).toBe(4 * 60 * 1000);
+    expect(DRAFT_TIMEOUT_MS).toBe(45_000);
+    const toml = readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), "../fly.toml"),
+      "utf8",
+    );
+    expect(toml).toMatch(/\[http_service\.http_options\][\s\S]*idle_timeout\s*=\s*600/);
+  });
+
   it("treats claude model ids as Claude and everything else as OpenAI", () => {
     expect(isClaudeModel("claude-opus-4-6")).toBe(true);
     expect(isClaudeModel(" Claude-Sonnet-4-6 ")).toBe(true);
@@ -489,6 +505,9 @@ describe("model routing", () => {
   it("sends a Claude model to Anthropic with the Voice system and user text", async () => {
     const prev = process.env.ANTHROPIC_API_KEY;
     process.env.ANTHROPIC_API_KEY = "test-key";
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation(() => new AbortController().signal);
     const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as {
         model: string;
@@ -513,7 +532,65 @@ describe("model routing", () => {
         fetchImpl: fetchImpl as typeof fetch,
       });
       expect(text).toMatch(/Mix the pellets/);
+      expect(timeout).toHaveBeenCalledWith(CLAUDE_DRAFT_TIMEOUT_MS);
     } finally {
+      timeout.mockRestore();
+      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = prev;
+    }
+  });
+
+  it("names the model when Claude runs past 4 minutes", async () => {
+    const prev = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    vi.spyOn(AbortSignal, "timeout").mockImplementation(() => new AbortController().signal);
+    try {
+      for (const name of ["TimeoutError", "AbortError"]) {
+        await expect(
+          completeWithAnthropic({
+            system: "Write like WoolGrown.",
+            user: "Facts.",
+            model: "claude-opus-4-6",
+            fetchImpl: (async () => {
+              throw Object.assign(new Error("The operation was aborted due to timeout"), {
+                name,
+              });
+            }) as typeof fetch,
+          }),
+        ).rejects.toMatchObject({
+          message: "Claude draft timed out after 4 minutes (claude-opus-4-6).",
+          status: 504,
+        });
+      }
+    } finally {
+      vi.restoreAllMocks();
+      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = prev;
+    }
+  });
+
+  it("keeps Claude’s status and response on a failed draft", async () => {
+    const prev = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    vi.spyOn(AbortSignal, "timeout").mockImplementation(() => new AbortController().signal);
+    try {
+      await expect(
+        completeWithAnthropic({
+          system: "Write like WoolGrown.",
+          user: "Facts.",
+          model: "claude-opus-4-6",
+          fetchImpl: (async () =>
+            new Response('{"type":"error","error":{"message":"model not found"}}', {
+              status: 404,
+            })) as typeof fetch,
+        }),
+      ).rejects.toMatchObject({
+        message:
+          'Claude draft failed (404): {"type":"error","error":{"message":"model not found"}}',
+        status: 404,
+      });
+    } finally {
+      vi.restoreAllMocks();
       if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
       else process.env.ANTHROPIC_API_KEY = prev;
     }

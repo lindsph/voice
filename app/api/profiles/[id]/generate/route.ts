@@ -5,9 +5,21 @@ import { ShopifyHeadlineRejected } from "@/lib/generate";
 import { generateForProfile } from "@/lib/store";
 import { generateInputSchema } from "@/lib/types";
 
-export const maxDuration = 60;
+/** Two 4-minute Claude tries, with room to return the error. */
+export const maxDuration = 600;
 
 type Props = { params: Promise<{ id: string }> };
+
+export function generateErrorStatus(error: unknown, message: string): number {
+  if (error && typeof error === "object" && "status" in error) {
+    const status = Number((error as { status: unknown }).status);
+    if (Number.isInteger(status) && status >= 400 && status <= 599) return status;
+  }
+  if (message.includes("OPENAI_API_KEY") || message.includes("ANTHROPIC_API_KEY")) {
+    return 503;
+  }
+  return 400;
+}
 
 export async function POST(request: Request, { params }: Props) {
   if (!authorize(request)) {
@@ -32,8 +44,6 @@ export async function POST(request: Request, { params }: Props) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     const message = error instanceof Error ? error.message : "Could not generate";
-    const missing =
-      message.includes("OPENAI_API_KEY") || message.includes("ANTHROPIC_API_KEY");
-    return NextResponse.json({ error: message }, { status: missing ? 503 : 400 });
+    return NextResponse.json({ error: message }, { status: generateErrorStatus(error, message) });
   }
 }

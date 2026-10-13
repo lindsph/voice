@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { POST } from "../app/api/profiles/[id]/generate/route";
+import { generateErrorStatus, maxDuration, POST } from "../app/api/profiles/[id]/generate/route";
 import { generateForProfile } from "@/lib/store";
 import type { DraftTrace } from "./types";
 
@@ -81,5 +81,29 @@ describe("POST /api/profiles/:id/generate", () => {
       task: undefined,
       model: "claude-opus-4-6",
     });
+  });
+
+  it("returns Claude’s timeout message and status", async () => {
+    vi.mocked(generateForProfile).mockRejectedValue(
+      Object.assign(new Error("Claude draft timed out after 4 minutes (claude-opus-4-6)."), {
+        status: 504,
+      }),
+    );
+    const response = await POST(request({ surface: "blog", facts: "Raised beds." }), {
+      params: Promise.resolve({ id: "woolgrown" }),
+    });
+    expect(response.status).toBe(504);
+    await expect(response.json()).resolves.toEqual({
+      error: "Claude draft timed out after 4 minutes (claude-opus-4-6).",
+    });
+  });
+
+  it("keeps a missing model key unavailable", () => {
+    expect(maxDuration).toBe(600);
+    expect(
+      generateErrorStatus(new Error("Add ANTHROPIC_API_KEY to Voice’s .env."), "Add ANTHROPIC_API_KEY to Voice’s .env."),
+    ).toBe(503);
+    expect(generateErrorStatus(new Error("Could not generate"), "Could not generate")).toBe(400);
+    expect(generateErrorStatus(Object.assign(new Error("nope"), { status: 200 }), "nope")).toBe(400);
   });
 });

@@ -17,7 +17,13 @@ export { bannedHits } from "./slop";
 
 export const DRAFT_MODEL = process.env.OPENAI_DRAFT_MODEL?.trim() || "gpt-4o";
 export const DRAFT_TEMPERATURE = 0.45;
+/** Short OpenAI notes. Claude blog drafts use CLAUDE_DRAFT_TIMEOUT_MS. */
 export const DRAFT_TIMEOUT_MS = 45_000;
+/**
+ * Anthropic’s non-streaming estimate for this draft’s 8,192-token cap:
+ * 1 hour × 8192 / 128000 ≈ 4 minutes.
+ */
+export const CLAUDE_DRAFT_TIMEOUT_MS = 4 * 60 * 1000;
 
 export type ChatComplete = (input: { system: string; user: string }) => Promise<string>;
 
@@ -257,6 +263,20 @@ function headlineBody(task: ShopifyHeadlineTask | undefined, body: string): stri
   return shopifyHeadlineBody(headline);
 }
 
+export function isTimeoutError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err.name === "TimeoutError" || err.name === "AbortError")
+  );
+}
+
+export function claudeDraftTimeoutError(model: string): Error {
+  return Object.assign(
+    new Error(`Claude draft timed out after 4 minutes (${model}).`),
+    { status: 504 },
+  );
+}
+
 export function isClaudeModel(model: string | undefined): boolean {
   return (model ?? "").trim().toLowerCase().startsWith("claude-");
 }
@@ -277,19 +297,28 @@ export async function completeWithAnthropic(input: {
   if (!apiKey) {
     throw new Error("Add ANTHROPIC_API_KEY to Voice’s .env.");
   }
-  const response = await (input.fetchImpl ?? fetch)("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify(anthropicDraftBody(input)),
-    signal: AbortSignal.timeout(DRAFT_TIMEOUT_MS),
-  });
+  let response: Response;
+  try {
+    response = await (input.fetchImpl ?? fetch)("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(anthropicDraftBody(input)),
+      signal: AbortSignal.timeout(CLAUDE_DRAFT_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (isTimeoutError(err)) throw claudeDraftTimeoutError(input.model);
+    throw err;
+  }
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 240);
-    throw new Error(`Claude draft failed (${response.status}): ${detail}`);
+    throw Object.assign(
+      new Error(`Claude draft failed (${response.status}): ${detail}`),
+      { status: response.status },
+    );
   }
   const json = (await response.json()) as {
     content?: Array<{ type?: string; text?: string }>;
