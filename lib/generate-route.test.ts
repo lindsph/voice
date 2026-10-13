@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { generateErrorStatus, maxDuration, POST } from "../app/api/profiles/[id]/generate/route";
+import { maxDuration, POST } from "../app/api/profiles/[id]/generate/route";
+import { generateErrorStatus } from "./generate-error";
 import { generateForProfile } from "@/lib/store";
 import type { DraftTrace } from "./types";
 
