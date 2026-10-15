@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { authorize } from "@/lib/auth";
 import { generateErrorStatus } from "@/lib/generate-error";
-import { ShopifyHeadlineRejected } from "@/lib/generate";
+import { ShopifyExcerptRejected, ShopifyHeadlineRejected } from "@/lib/generate";
 import { generateForProfile } from "@/lib/store";
 import { generateInputSchema } from "@/lib/types";
 
@@ -30,7 +30,7 @@ export async function POST(request: Request, { params }: Props) {
     });
     return NextResponse.json(result);
   } catch (error) {
-    if (error instanceof ShopifyHeadlineRejected) {
+    if (error instanceof ShopifyHeadlineRejected || error instanceof ShopifyExcerptRejected) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     const message = error instanceof Error ? error.message : "Could not generate";

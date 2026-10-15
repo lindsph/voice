@@ -8,10 +8,21 @@ import {
   shopifyHeadlineBody,
   type ShopifyHeadlineTask,
 } from "./shopify-headline";
+import {
+  parseShopifyExcerpt,
+  SHOPIFY_EXCERPT_INSTRUCTION,
+  SHOPIFY_EXCERPT_TASK,
+  ShopifyExcerptRejected,
+  shopifyExcerptBody,
+  type ShopifyExcerptTask,
+} from "./shopify-excerpt";
 import { lintDraft } from "./slop";
 import type { DraftTrace, Profile } from "./types";
 
-export { ShopifyHeadlineRejected };
+export { ShopifyExcerptRejected, ShopifyHeadlineRejected };
+
+/** One-line Shopify fields. Not blog drafts, and not format "plain". */
+export type ShopifyTask = ShopifyHeadlineTask | ShopifyExcerptTask;
 
 export { bannedHits } from "./slop";
 
@@ -50,11 +61,11 @@ export function buildUserPrompt(input: {
   learnings: ToneBundleInput["learnings"];
   architecture?: string;
   format?: "blog" | "plain";
-  task?: ShopifyHeadlineTask;
+  task?: ShopifyTask;
   retryContext?: string;
 }): string {
   const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
-  if (input.task === SHOPIFY_HEADLINE_TASK) {
+  if (input.task === SHOPIFY_HEADLINE_TASK || input.task === SHOPIFY_EXCERPT_TASK) {
     return [
       `Write for the “${input.profile.name}” voice.`,
       "",
@@ -77,7 +88,9 @@ export function buildUserPrompt(input: {
         ? ["", "Previous draft failed a standing rule. Rewrite from scratch and fix:", input.retryContext]
         : []),
       "",
-      SHOPIFY_HEADLINE_INSTRUCTION,
+      input.task === SHOPIFY_EXCERPT_TASK
+        ? SHOPIFY_EXCERPT_INSTRUCTION
+        : SHOPIFY_HEADLINE_INSTRUCTION,
     ].join("\n");
   }
   const blogShape = input.format === "blog" || input.surfaceId === "blog";
@@ -117,10 +130,22 @@ function draftHits(
     profile: Profile;
     surfaceId: string;
     format?: "blog" | "plain";
-    task?: ShopifyHeadlineTask;
+    task?: ShopifyTask;
   },
 ): string[] {
   const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
+  if (input.task === SHOPIFY_EXCERPT_TASK) {
+    const excerpt = parseShopifyExcerpt(body);
+    if (!excerpt) {
+      return ["Shopify excerpt must be one JSON object with a non-empty excerpt."];
+    }
+    return lintDraft({
+      body: excerpt,
+      banned: input.profile.bannedForPrompt,
+      surfaceId: input.surfaceId,
+      maxWords: null,
+    });
+  }
   if (input.task === SHOPIFY_HEADLINE_TASK) {
     const headline = parseShopifyHeadline(body);
     if (!headline) {
@@ -220,7 +245,7 @@ export async function generateDraft(
     learnings: ToneBundleInput["learnings"];
     architecture?: string;
     format?: "blog" | "plain";
-    task?: ShopifyHeadlineTask;
+    task?: ShopifyTask;
     model?: string;
   },
   complete: ChatComplete,
@@ -256,7 +281,12 @@ export async function generateDraft(
   };
 }
 
-function headlineBody(task: ShopifyHeadlineTask | undefined, body: string): string {
+function headlineBody(task: ShopifyTask | undefined, body: string): string {
+  if (task === SHOPIFY_EXCERPT_TASK) {
+    const excerpt = parseShopifyExcerpt(body);
+    if (!excerpt) throw new ShopifyExcerptRejected();
+    return shopifyExcerptBody(excerpt);
+  }
   if (task !== SHOPIFY_HEADLINE_TASK) return body;
   const headline = parseShopifyHeadline(body);
   if (!headline) throw new ShopifyHeadlineRejected();

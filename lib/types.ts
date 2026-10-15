@@ -114,7 +114,7 @@ export const generateInputSchema = z.object({
   seed: z.string().optional(),
   architecture: z.string().optional(),
   format: z.enum(["blog", "plain"]).optional(),
-  task: z.literal("shopify_headline").optional(),
+  task: z.enum(["shopify_headline", "shopify_excerpt"]).optional(),
   model: z.string().optional(),
 });
 

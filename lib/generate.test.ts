@@ -709,6 +709,36 @@ describe("shopify headline task", () => {
     ).rejects.toThrow(/non-empty headline/);
   });
 
+  it("asks for one excerpt with the excerpt task and returns it as JSON", async () => {
+    let user = "";
+    const result = await generateDraft(
+      {
+        ...draftInput(blogProfile, "blog"),
+        task: "shopify_excerpt",
+        facts: "Mix half a cup of pellets into four cups of potting mix.",
+      },
+      async ({ user: prompt }) => {
+        user = prompt;
+        return JSON.stringify({ excerpt: "  Mix half a cup into\n four cups of mix.  " });
+      },
+    );
+    expect(user).toContain('{"excerpt":"one or two sentences for the blog page preview"}');
+    expect(user).toContain("Mix half a cup of pellets into four cups of potting mix.");
+    expect(user).not.toContain('{"headline"');
+    expect(user).not.toContain("Shape of the post");
+    expect(result.body).toBe(JSON.stringify({ excerpt: "Mix half a cup into four cups of mix." }));
+    expect(result.retried).toBe(false);
+  });
+
+  it("rejects a full article for the excerpt task", async () => {
+    await expect(
+      generateDraft(
+        { ...draftInput(blogProfile, "blog"), task: "shopify_excerpt" },
+        async () => validBlog,
+      ),
+    ).rejects.toThrow(/non-empty excerpt/);
+  });
+
   it("keeps the full blog instruction when format is plain on the blog surface", async () => {
     let user = "";
     await generateDraft(

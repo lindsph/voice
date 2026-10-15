@@ -184,7 +184,7 @@ export async function generateForProfile(input: {
   seed?: string;
   architecture?: string;
   format?: "blog" | "plain";
-  task?: "shopify_headline";
+  task?: "shopify_headline" | "shopify_excerpt";
   model?: string;
 }): Promise<{ body: string; retried: boolean; bundle: string; warnings: string[]; trace: DraftTrace }> {
   const corpus = await getBundle({
