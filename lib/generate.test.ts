@@ -211,6 +211,7 @@ describe("generateDraft slop retry", () => {
     expect(user).toContain("lead");
     expect(user).toContain("sections");
     expect(user).toContain("one soft close");
+    expect(user).toContain("metaDescription, excerpt,");
     expect(user).not.toContain("Write the draft only");
   });
 

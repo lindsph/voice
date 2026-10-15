@@ -10,7 +10,7 @@ export const BLOG_SHAPE_INSTRUCTION = [
   "- sections: at least two objects {heading, body}",
   "- faq: three to eight short {question, answer} items",
   "- cta: one soft close",
-  "Also include title, slug, metaDescription, primaryQuestion, sourcesHeading, sourcesBody, citations, claimsReviewRequired, suggestedProducts, internalLinks.",
+  "Also include title, slug, metaDescription, excerpt, primaryQuestion, sourcesHeading, sourcesBody, citations, claimsReviewRequired, suggestedProducts, internalLinks.",
   "citations must be source ids copied from the facts. Do not invent ids.",
 ].join("\n");
 
