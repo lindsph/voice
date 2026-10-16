@@ -52,6 +52,26 @@ export function unwrapDraft(text: string): string {
   return body;
 }
 
+/** Blog JSON unless the caller asked for plain. A plain blog request is one passage (rewrite/shorten). */
+export function isBlogShape(input: { surfaceId: string; format?: "blog" | "plain" }): boolean {
+  if (input.format === "plain") return false;
+  return input.format === "blog" || input.surfaceId === "blog";
+}
+
+export const BLOG_PASSAGE_HINT =
+  "One passage for a shop blog post, not a whole post. No title, sections, FAQ, CTA, or JSON.";
+
+/** The blog surface hint describes a whole post, so a plain request swaps it for a passage hint. */
+function promptSurface(input: {
+  profile: Profile;
+  surfaceId: string;
+  format?: "blog" | "plain";
+}): Profile["surfaces"][number] | undefined {
+  const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
+  if (!surface || input.surfaceId !== "blog" || isBlogShape(input)) return surface;
+  return { ...surface, hint: BLOG_PASSAGE_HINT };
+}
+
 export function buildUserPrompt(input: {
   profile: Profile;
   surfaceId: string;
@@ -64,7 +84,6 @@ export function buildUserPrompt(input: {
   task?: ShopifyTask;
   retryContext?: string;
 }): string {
-  const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
   if (input.task === SHOPIFY_HEADLINE_TASK || input.task === SHOPIFY_EXCERPT_TASK) {
     return [
       `Write for the “${input.profile.name}” voice.`,
@@ -93,7 +112,8 @@ export function buildUserPrompt(input: {
         : SHOPIFY_HEADLINE_INSTRUCTION,
     ].join("\n");
   }
-  const blogShape = input.format === "blog" || input.surfaceId === "blog";
+  const blogShape = isBlogShape(input);
+  const surface = promptSurface(input);
   return [
     `Write for the “${input.profile.name}” voice.`,
     surface?.hint ?? `Surface: ${input.surfaceId}`,
@@ -118,7 +138,7 @@ export function buildUserPrompt(input: {
       ? ["", "Previous draft failed a standing rule. Rewrite from scratch and fix:", input.retryContext]
       : []),
     "",
-    input.surfaceId === "blog" || blogShape
+    blogShape
       ? BLOG_SHAPE_INSTRUCTION
       : "Write the draft only — no title, no quotation marks around the whole thing, no preamble.",
   ].join("\n");
@@ -158,7 +178,7 @@ function draftHits(
       maxWords: null,
     });
   }
-  const blogShape = input.format === "blog" || input.surfaceId === "blog";
+  const blogShape = isBlogShape(input);
   const prose = blogShape ? blogProse(body) : body;
   return [
     ...(blogShape ? blogDraftIssues(body) : []),

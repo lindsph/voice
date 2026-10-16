@@ -739,17 +739,37 @@ describe("shopify headline task", () => {
     ).rejects.toThrow(/non-empty excerpt/);
   });
 
-  it("keeps the full blog instruction when format is plain on the blog surface", async () => {
+  it("keeps the full blog instruction on the blog surface when no format is sent", async () => {
     let user = "";
-    await generateDraft(
-      { ...draftInput(blogProfile, "blog"), format: "plain" },
-      async ({ user: prompt }) => {
-        user = prompt;
-        return validBlog;
-      },
-    );
+    await generateDraft(draftInput(blogProfile, "blog"), async ({ user: prompt }) => {
+      user = prompt;
+      return validBlog;
+    });
     expect(user).toContain("Shape of the post");
     expect(user).toContain("Lead, then sections");
     expect(user).not.toContain("no title");
+  });
+
+  it("asks for one plain passage when format is plain on the blog surface", async () => {
+    const prompts: string[] = [];
+    const result = await generateDraft(
+      {
+        ...draftInput(blogProfile, "blog"),
+        format: "plain",
+        facts: "Rewrite the bracketed selection. Mix half a cup of pellets into four cups of potting mix.",
+      },
+      async ({ user: prompt }) => {
+        prompts.push(prompt);
+        return "Mix half a cup of pellets into every four cups of potting mix.";
+      },
+    );
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("One passage for a shop blog post, not a whole post.");
+    expect(prompts[0]).toContain("no title");
+    expect(prompts[0]).not.toContain("Shape of the post");
+    expect(prompts[0]).not.toContain("Lead, then sections");
+    expect(result.body).toBe("Mix half a cup of pellets into every four cups of potting mix.");
+    expect(result.retried).toBe(false);
+    expect(result.warnings).toEqual([]);
   });
 });
