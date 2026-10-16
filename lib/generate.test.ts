@@ -750,6 +750,31 @@ describe("shopify headline task", () => {
     expect(user).not.toContain("no title");
   });
 
+  it("swaps the caption note and word cap for the passage note when format is plain", async () => {
+    let user = "";
+    await generateDraft(
+      { ...draftInput(woolgrown, "social"), format: "plain" },
+      async ({ user: prompt }) => {
+        user = prompt;
+        return "Mix half a cup into four cups.";
+      },
+    );
+    expect(user).toContain("Edit one passage. Return only the replacement for it");
+    expect(user).not.toContain("A caption.");
+    expect(user).not.toContain("Stay under 80 words");
+  });
+
+  it("keeps the caption note when no format is sent", async () => {
+    let user = "";
+    await generateDraft(draftInput(woolgrown, "social"), async ({ user: prompt }) => {
+      user = prompt;
+      return "Mix half a cup into four cups.";
+    });
+    expect(user).toContain("A caption.");
+    expect(user).toContain("Stay under 80 words");
+    expect(user).not.toContain("Edit one passage");
+  });
+
   it("asks for one plain passage when format is plain on the blog surface", async () => {
     const prompts: string[] = [];
     const result = await generateDraft(
@@ -764,7 +789,7 @@ describe("shopify headline task", () => {
       },
     );
     expect(prompts).toHaveLength(1);
-    expect(prompts[0]).toContain("One passage for a shop blog post, not a whole post.");
+    expect(prompts[0]).toContain("Edit one passage. Return only the replacement for it");
     expect(prompts[0]).toContain("no title");
     expect(prompts[0]).not.toContain("Shape of the post");
     expect(prompts[0]).not.toContain("Lead, then sections");

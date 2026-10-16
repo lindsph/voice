@@ -58,18 +58,19 @@ export function isBlogShape(input: { surfaceId: string; format?: "blog" | "plain
   return input.format === "blog" || input.surfaceId === "blog";
 }
 
-export const BLOG_PASSAGE_HINT =
-  "One passage for a shop blog post, not a whole post. No title, sections, FAQ, CTA, or JSON.";
+/** A plain request edits one passage (rewrite/shorten). The caller sets the length. */
+export const PASSAGE_EDIT_HINT =
+  "Edit one passage. Return only the replacement for it, not a whole post, FAQ answer, or caption. No title, sections, FAQ, CTA, JSON, or added sentences.";
 
-/** The blog surface hint describes a whole post, so a plain request swaps it for a passage hint. */
+/** Surface hints describe a whole post, answer, or caption, so a plain request swaps in the passage note. */
 function promptSurface(input: {
   profile: Profile;
   surfaceId: string;
   format?: "blog" | "plain";
 }): Profile["surfaces"][number] | undefined {
   const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
-  if (!surface || input.surfaceId !== "blog" || isBlogShape(input)) return surface;
-  return { ...surface, hint: BLOG_PASSAGE_HINT };
+  if (!surface || input.format !== "plain") return surface;
+  return { ...surface, hint: PASSAGE_EDIT_HINT, maxWords: null };
 }
 
 export function buildUserPrompt(input: {
