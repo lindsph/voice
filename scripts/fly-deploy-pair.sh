@@ -64,6 +64,40 @@ if [[ -f "$COMMAND_ROOT/fly.toml" ]]; then
   require_clean_pushed "$COMMAND_ROOT" "Command"
 fi
 
+# One tiny request per model, through Voice's real request code. A retired
+# model or a changed request rule stops the deploy here, not in the app.
+# Run a command on the repo's .nvmrc Node (20); tsx's native build needs it.
+with_repo_node() {
+  local dir="$1"; shift
+  (
+    cd "$dir"
+    if [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
+      # shellcheck disable=SC1091
+      source "${NVM_DIR:-$HOME/.nvm}/nvm.sh" >/dev/null
+      nvm use --silent >/dev/null
+    fi
+    "$@"
+  )
+}
+
+check_models() {
+  local models=()
+  if [[ -f "$COMMAND_ROOT/web/scripts/print-voice-models.ts" ]]; then
+    local list
+    if ! list="$(with_repo_node "$COMMAND_ROOT/web" npx tsx --tsconfig tsconfig.json scripts/print-voice-models.ts)"; then
+      echo "Refuse: could not list Command's Voice models." >&2
+      exit 1
+    fi
+    while IFS= read -r line; do [[ -n "$line" ]] && models+=("$line"); done <<< "$list"
+  fi
+  echo "Checking models: Voice default ${models[*]:-}"
+  if ! with_repo_node "$VOICE_ROOT" npx tsx scripts/check-models.mts "${models[@]}"; then
+    echo "Refuse: a model failed the check. Nothing was deployed." >&2
+    exit 1
+  fi
+}
+check_models
+
 echo "Voice checkout: $VOICE_ROOT ($(voice_sha))"
 
 if voice_needs_deploy; then
