@@ -332,9 +332,21 @@ export function isClaudeModel(model: string | undefined): boolean {
   return (model ?? "").trim().toLowerCase().startsWith("claude-");
 }
 
-/** Opus 5.5 rejects any temperature other than the default. Thinking stays on. */
+/**
+ * Claude models that still take a temperature. Opus 4.7 and every newer model
+ * (Opus 5.5, Sonnet 5.5, Haiku 5.5…) reject it with a 400, so a model not on
+ * this list gets no temperature: a new model works by default.
+ */
+export const CLAUDE_SAMPLING_MODELS = [
+  "claude-opus-4-6",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5",
+] as const;
+
+/** No temperature, thinking stays on, effort medium. True for any model not known to take a temperature. */
 export function claudeOmitsSampling(model: string): boolean {
-  return model.trim().toLowerCase() === "claude-opus-5-5";
+  const id = model.trim().toLowerCase();
+  return !(CLAUDE_SAMPLING_MODELS as readonly string[]).includes(id);
 }
 
 export async function completeWithAnthropic(input: {

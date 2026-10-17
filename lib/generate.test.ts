@@ -482,6 +482,17 @@ describe("model routing", () => {
     expect(claudeOmitsSampling("claude-opus-4-6")).toBe(false);
   });
 
+  it("omits temperature on Sonnet 5.5 and on a model Voice has never seen", () => {
+    for (const model of ["claude-sonnet-5-5", " Claude-Haiku-5-5 ", "claude-opus-6"]) {
+      const body = anthropicDraftBody({ system: "s", user: "u", model, temperature: 0.45 });
+      expect(body.temperature, model).toBeUndefined();
+      expect(body.output_config, model).toEqual({ effort: "medium" });
+    }
+    for (const model of ["claude-sonnet-4-6", "claude-haiku-4-5"]) {
+      expect(anthropicDraftBody({ system: "s", user: "u", model }).temperature, model).toBe(0.45);
+    }
+  });
+
   it("omits temperature on Opus 5.5 and keeps it on Opus 4.6", () => {
     const newer = anthropicDraftBody({
       system: "Write like WoolGrown.",
