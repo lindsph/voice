@@ -27,6 +27,7 @@ export async function POST(request: Request, { params }: Props) {
       format: input.format,
       task: input.task,
       model: input.model,
+      guide: input.guide,
     });
     return NextResponse.json(result);
   } catch (error) {

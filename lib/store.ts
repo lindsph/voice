@@ -186,6 +186,8 @@ export async function generateForProfile(input: {
   format?: "blog" | "plain";
   task?: "shopify_headline" | "shopify_excerpt";
   model?: string;
+  /** Host-sent tone guide. Wins over the stored copy, which is refreshed to match. */
+  guide?: string;
 }): Promise<{
   body: string;
   retried: boolean;
@@ -203,9 +205,19 @@ export async function generateForProfile(input: {
     architecture: input.architecture,
   });
   const model = input.model?.trim() || DRAFT_MODEL;
+  const sentGuide = input.guide?.trim() ?? "";
+  const profile = sentGuide ? { ...corpus.profile, guide: sentGuide } : corpus.profile;
+  if (sentGuide && sentGuide !== corpus.profile.guide.trim()) {
+    // Keep the stored copy (shown on Voice's page, used as a fallback) in step.
+    try {
+      await updateGuide(input.profileId, sentGuide);
+    } catch (error) {
+      console.error("Failed to refresh stored guide", error);
+    }
+  }
   const result = await generateDraft(
     {
-      profile: corpus.profile,
+      profile,
       surfaceId: input.surface,
       facts: input.facts,
       seed: input.seed ?? input.surface,

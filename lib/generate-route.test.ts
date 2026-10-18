@@ -49,6 +49,21 @@ describe("POST /api/profiles/:id/generate", () => {
     vi.mocked(generateForProfile).mockReset();
   });
 
+  it("passes the host's tone guide through to the generator", async () => {
+    vi.mocked(generateForProfile).mockResolvedValue({
+      body: "Wool in the booth.",
+      retried: false,
+      bundle: "prompt",
+      warnings: [],
+      trace,
+      generationId: null,
+    });
+    await POST(request({ surface: "blog", facts: "Raised beds.", guide: "## Who we sound like\n\nRepo guide." }), {
+      params: Promise.resolve({ id: "woolgrown" }),
+    });
+    expect(vi.mocked(generateForProfile).mock.calls[0]?.[0].guide).toBe("## Who we sound like\n\nRepo guide.");
+  });
+
   it("returns the draft trace and log id with the body", async () => {
     vi.mocked(generateForProfile).mockResolvedValue({
       body: "Wool in the booth.",

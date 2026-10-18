@@ -5,6 +5,7 @@ const generateDraft = vi.hoisted(() => vi.fn());
 const findUnique = vi.hoisted(() => vi.fn());
 const golds = vi.hoisted(() => vi.fn());
 const learnings = vi.hoisted(() => vi.fn());
+const profileUpdate = vi.hoisted(() => vi.fn());
 
 vi.mock("./generation-log", async () => {
   const actual = await vi.importActual<typeof import("./generation-log")>("./generation-log");
@@ -18,7 +19,7 @@ vi.mock("./generate", async () => {
 
 vi.mock("./db", () => ({
   prisma: {
-    profile: { findUnique },
+    profile: { findUnique, update: profileUpdate },
     gold: { findMany: golds },
     learning: { findMany: learnings },
   },
@@ -105,5 +106,38 @@ describe("generateForProfile logging", () => {
     });
     expect(result).toEqual({ ...draft, generationId: null });
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it("writes with the guide the host sent and refreshes the stored copy", async () => {
+    profileUpdate.mockReset();
+    profileUpdate.mockImplementation(async ({ data }: { data: { guide: string } }) => ({
+      id: "woolgrown",
+      name: "WoolGrown",
+      description: "",
+      guide: data.guide,
+      systemPrompt: "Write.",
+      bannedForPrompt: "[]",
+      surfaces: "[]",
+      updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+    }));
+    await generateForProfile({
+      profileId: "woolgrown",
+      surface: "blog",
+      facts: "Raised beds.",
+      guide: "## Who we sound like\n\nThe repo guide.",
+    });
+    expect(generateDraft.mock.calls.at(-1)?.[0].profile.guide).toBe("## Who we sound like\n\nThe repo guide.");
+    expect(profileUpdate).toHaveBeenCalledWith({
+      where: { id: "woolgrown" },
+      data: { guide: "## Who we sound like\n\nThe repo guide." },
+    });
+  });
+
+  it("uses the stored guide and leaves it alone when the host sends none or the same one", async () => {
+    profileUpdate.mockReset();
+    await generateForProfile({ profileId: "woolgrown", surface: "blog", facts: "Raised beds." });
+    expect(generateDraft.mock.calls.at(-1)?.[0].profile.guide).toBe("Practical.");
+    await generateForProfile({ profileId: "woolgrown", surface: "blog", facts: "Raised beds.", guide: " Practical. " });
+    expect(profileUpdate).not.toHaveBeenCalled();
   });
 });
