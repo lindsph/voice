@@ -444,6 +444,14 @@ export async function completeDraft(input: {
   return completeWithOpenAi({ ...input, model });
 }
 
+/** OpenAI's 400 for a model that only takes its default temperature. */
+export function openAiRejectsTemperature(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const status = (err as { status?: unknown }).status;
+  const message = String((err as { message?: unknown }).message ?? "");
+  return status === 400 && /temperature/i.test(message);
+}
+
 export async function completeWithOpenAi(input: {
   system: string;
   user: string;
@@ -456,18 +464,25 @@ export async function completeWithOpenAi(input: {
   }
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey });
-  const completion = await client.chat.completions.create(
-    {
-      model: input.model?.trim() || OPENAI_FALLBACK_MODEL,
-      temperature: input.temperature ?? DRAFT_TEMPERATURE,
-      store: false,
-      messages: [
-        { role: "system", content: input.system },
-        { role: "user", content: input.user },
-      ],
-    },
-    { timeout: DRAFT_TIMEOUT_MS },
-  );
+  const request = {
+    model: input.model?.trim() || OPENAI_FALLBACK_MODEL,
+    store: false,
+    messages: [
+      { role: "system" as const, content: input.system },
+      { role: "user" as const, content: input.user },
+    ],
+  };
+  let completion;
+  try {
+    completion = await client.chat.completions.create(
+      { ...request, temperature: input.temperature ?? DRAFT_TEMPERATURE },
+      { timeout: DRAFT_TIMEOUT_MS },
+    );
+  } catch (err) {
+    // GPT-5.6, GPT-6 and newer take only their default temperature.
+    if (!openAiRejectsTemperature(err)) throw err;
+    completion = await client.chat.completions.create(request, { timeout: DRAFT_TIMEOUT_MS });
+  }
   const text = completion.choices[0]?.message?.content?.trim();
   if (!text) throw new Error("The model returned an empty draft.");
   return text;

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildUserPrompt,
@@ -11,6 +11,7 @@ import {
   CLAUDE_DRAFT_TIMEOUT_MS,
   DRAFT_MODEL,
   OPENAI_FALLBACK_MODEL,
+  openAiRejectsTemperature,
   DRAFT_TIMEOUT_MS,
   formatRetryReason,
   generateDraft,
@@ -814,5 +815,48 @@ describe("shopify headline task", () => {
     expect(result.body).toBe("Mix half a cup of pellets into every four cups of potting mix.");
     expect(result.retried).toBe(false);
     expect(result.warnings).toEqual([]);
+  });
+});
+
+describe("OpenAI temperature", () => {
+  const create = vi.fn();
+  beforeEach(() => {
+    create.mockReset();
+    vi.doMock("openai", () => ({
+      default: class {
+        chat = { completions: { create } };
+      },
+    }));
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || "test-key";
+  });
+
+  it("recognises OpenAI's refusal of a non-default temperature, and nothing else", () => {
+    expect(
+      openAiRejectsTemperature({
+        status: 400,
+        message: "400 Unsupported value: 'temperature' does not support 0.45 with this model.",
+      }),
+    ).toBe(true);
+    expect(openAiRejectsTemperature({ status: 400, message: "Invalid model" })).toBe(false);
+    expect(openAiRejectsTemperature({ status: 429, message: "temperature" })).toBe(false);
+    expect(openAiRejectsTemperature(null)).toBe(false);
+  });
+
+  it("retries without temperature when a newer model refuses it", async () => {
+    const { completeWithOpenAi: complete } = await import("./generate");
+    create
+      .mockRejectedValueOnce(Object.assign(new Error("400 Unsupported value: 'temperature'"), { status: 400 }))
+      .mockResolvedValueOnce({ choices: [{ message: { content: "Mix it in." } }] });
+    await expect(complete({ system: "s", user: "u", model: "gpt-5.6-luna" })).resolves.toBe("Mix it in.");
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ model: "gpt-5.6-luna", temperature: 0.45 });
+    expect(create.mock.calls[1]?.[0]).not.toHaveProperty("temperature");
+  });
+
+  it("does not retry other errors", async () => {
+    const { completeWithOpenAi: complete } = await import("./generate");
+    create.mockRejectedValueOnce(Object.assign(new Error("429 rate limited"), { status: 429 }));
+    await expect(complete({ system: "s", user: "u", model: "gpt-4o" })).rejects.toThrow("429");
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });
