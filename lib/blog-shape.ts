@@ -12,6 +12,7 @@ export const BLOG_SHAPE_INSTRUCTION = [
   "- cta: one soft close",
   "Also include title, slug, metaDescription, excerpt, primaryQuestion, sourcesHeading, sourcesBody, citations, claimsReviewRequired, suggestedProducts, internalLinks.",
   "citations must be source ids copied from the facts. Do not invent ids.",
+  "suggestedProducts and internalLinks are lists of plain strings: shop handles, and full https:// shop URLs. Never source ids, never objects.",
 ].join("\n");
 
 type BlogJson = {
