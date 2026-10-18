@@ -120,9 +120,9 @@ describe("logGeneration", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  it("writes the row after generation", async () => {
-    create.mockResolvedValue(row());
-    await logGeneration(
+  it("writes the row after generation and returns its id", async () => {
+    create.mockResolvedValue({ id: "gen-1" });
+    const id = await logGeneration(
       generationLogInput({
         profileId: "woolgrown",
         surface: "blog",
@@ -130,6 +130,7 @@ describe("logGeneration", () => {
         result,
       }),
     );
+    expect(id).toBe("gen-1");
     expect(create).toHaveBeenCalledOnce();
     expect(create.mock.calls[0]?.[0].data.generatedBody).toBe("Wire planters dry out quickly.");
   });
@@ -145,7 +146,7 @@ describe("logGeneration", () => {
           result,
         }),
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toBeNull();
     expect(console.error).toHaveBeenCalled();
   });
 });

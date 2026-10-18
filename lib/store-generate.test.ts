@@ -53,7 +53,7 @@ describe("generateForProfile logging", () => {
   beforeEach(() => {
     logGeneration.mockReset();
     generateDraft.mockReset();
-    logGeneration.mockResolvedValue(undefined);
+    logGeneration.mockResolvedValue("gen-1");
     generateDraft.mockResolvedValue(draft);
     findUnique.mockResolvedValue({
       id: "woolgrown",
@@ -70,7 +70,7 @@ describe("generateForProfile logging", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  it("returns the draft unchanged and logs only after it exists", async () => {
+  it("returns the draft with its log id and logs only after it exists", async () => {
     const result = await generateForProfile({
       profileId: "woolgrown",
       surface: "blog",
@@ -79,7 +79,7 @@ describe("generateForProfile logging", () => {
       architecture: "how-to-steps",
       model: "claude-opus-4-6",
     });
-    expect(result).toBe(draft);
+    expect(result).toEqual({ ...draft, generationId: "gen-1" });
     expect(generateDraft.mock.invocationCallOrder[0]).toBeLessThan(
       logGeneration.mock.invocationCallOrder[0] ?? 0,
     );
@@ -103,7 +103,7 @@ describe("generateForProfile logging", () => {
       surface: "blog",
       facts: "Raised beds.",
     });
-    expect(result).toEqual(draft);
+    expect(result).toEqual({ ...draft, generationId: null });
     expect(console.error).toHaveBeenCalled();
   });
 });

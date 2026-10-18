@@ -69,12 +69,20 @@ export function generationLogInput(input: {
   };
 }
 
-/** Write after the draft exists. A database miss must not change the draft. */
-export async function logGeneration(input: GenerationLogInput): Promise<void> {
+/**
+ * Write after the draft exists. A database miss must not change the draft.
+ * Returns the log id so the caller can report what she kept, or null.
+ */
+export async function logGeneration(input: GenerationLogInput): Promise<string | null> {
   try {
-    await prisma.generationLog.create({ data: generationLogData(input) });
+    const row = await prisma.generationLog.create({
+      data: generationLogData(input),
+      select: { id: true },
+    });
+    return row.id;
   } catch (error) {
     console.error("Failed to log generation", error);
+    return null;
   }
 }
 

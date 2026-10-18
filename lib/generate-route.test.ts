@@ -49,13 +49,14 @@ describe("POST /api/profiles/:id/generate", () => {
     vi.mocked(generateForProfile).mockReset();
   });
 
-  it("returns the draft trace with the body", async () => {
+  it("returns the draft trace and log id with the body", async () => {
     vi.mocked(generateForProfile).mockResolvedValue({
       body: "Wool in the booth.",
       retried: true,
       bundle: "prompt",
       warnings: ["delve"],
       trace,
+      generationId: "gen-1",
     });
     const response = await POST(request({
       surface: "blog",
@@ -71,6 +72,7 @@ describe("POST /api/profiles/:id/generate", () => {
       retried: true,
       warnings: ["delve"],
       trace,
+      generationId: "gen-1",
     });
     expect(generateForProfile).toHaveBeenCalledWith({
       profileId: "woolgrown",

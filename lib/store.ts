@@ -186,7 +186,15 @@ export async function generateForProfile(input: {
   format?: "blog" | "plain";
   task?: "shopify_headline" | "shopify_excerpt";
   model?: string;
-}): Promise<{ body: string; retried: boolean; bundle: string; warnings: string[]; trace: DraftTrace }> {
+}): Promise<{
+  body: string;
+  retried: boolean;
+  bundle: string;
+  warnings: string[];
+  trace: DraftTrace;
+  /** GenerationLog id; the host PATCHes /api/generations/:id with what she kept. Null if logging failed. */
+  generationId: string | null;
+}> {
   const corpus = await getBundle({
     profileId: input.profileId,
     surface: input.surface,
@@ -210,8 +218,9 @@ export async function generateForProfile(input: {
     },
     (prompt) => completeDraft({ ...prompt, model }),
   );
+  let generationId: string | null = null;
   try {
-    await logGeneration(
+    generationId = await logGeneration(
       generationLogInput({
         profileId: input.profileId,
         surface: input.surface,
@@ -224,7 +233,7 @@ export async function generateForProfile(input: {
   } catch (error) {
     console.error("Failed to log generation", error);
   }
-  return result;
+  return { ...result, generationId };
 }
 
 export async function learnForProfile(input: {
