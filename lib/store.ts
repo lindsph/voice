@@ -1,7 +1,7 @@
 import { prisma } from "./db";
 import { formatToneBundle } from "./bundle";
 import { generationLogInput, logGeneration } from "./generation-log";
-import { completeDraft, DRAFT_MODEL, generateDraft } from "./generate";
+import { completeDraft, craftedApplies, CRAFTED_EFFORT, DRAFT_MODEL, generateDraft } from "./generate";
 import { inferPreference } from "./infer";
 import {
   isClassificationSource,
@@ -186,6 +186,7 @@ export async function generateForProfile(input: {
   format?: "blog" | "plain";
   task?: "shopify_headline" | "shopify_excerpt";
   model?: string;
+  style?: "plain" | "crafted";
   /** Host-sent tone guide. Wins over the stored copy, which is refreshed to match. */
   guide?: string;
 }): Promise<{
@@ -227,8 +228,14 @@ export async function generateForProfile(input: {
       format: input.format,
       task: input.task,
       model,
+      style: input.style,
     },
-    (prompt) => completeDraft({ ...prompt, model }),
+    (prompt) =>
+      completeDraft({
+        ...prompt,
+        model,
+        effort: prompt.effort ?? (craftedApplies(input) ? CRAFTED_EFFORT : undefined),
+      }),
   );
   let generationId: string | null = null;
   try {

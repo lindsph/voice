@@ -40,6 +40,8 @@ const TRICOLON =
 export type SlopSurface = {
   surfaceId: string;
   maxWords?: number | null;
+  /** Crafted drafts may use one list of three in a caption. */
+  crafted?: boolean;
 };
 
 export function isCaptionSurface(surface: SlopSurface): boolean {
@@ -129,7 +131,7 @@ export function slopHits(body: string, surface: SlopSurface): string[] {
   }
 
   const stacks = findTricolons(text);
-  const tricolonLimit = isCaptionSurface(surface) ? 0 : 1;
+  const tricolonLimit = isCaptionSurface(surface) && !surface.crafted ? 0 : 1;
   if (stacks.length > tricolonLimit) {
     hits.push(`rule-of-three stack (${stacks.length})`);
   }
@@ -149,9 +151,14 @@ export function lintDraft(input: {
   banned: string[];
   surfaceId: string;
   maxWords?: number | null;
+  crafted?: boolean;
 }): string[] {
   return [
     ...bannedHits(input.body, input.banned),
-    ...slopHits(input.body, { surfaceId: input.surfaceId, maxWords: input.maxWords }),
+    ...slopHits(input.body, {
+      surfaceId: input.surfaceId,
+      maxWords: input.maxWords,
+      crafted: input.crafted,
+    }),
   ];
 }

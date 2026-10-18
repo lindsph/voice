@@ -103,6 +103,10 @@ export type DraftTrace = {
   bannedPhrasesChecked: string[];
   seed: string;
   architecture?: string;
+  /** Set only on crafted drafts. */
+  style?: "crafted";
+  /** The planned way in, when the angle call returned one. */
+  angle?: string;
   retryReason?: string;
   selectedGolds: DraftTraceGold[];
   selectedLearnings: DraftTraceLearning[];
@@ -116,6 +120,8 @@ export const generateInputSchema = z.object({
   format: z.enum(["blog", "plain"]).optional(),
   task: z.enum(["shopify_headline", "shopify_excerpt"]).optional(),
   model: z.string().optional(),
+  /** "crafted" writes with more life (angle, craft notes, rotated golds). Whole pieces only. */
+  style: z.enum(["plain", "crafted"]).optional(),
   /** The host's tone guide (its single source). Used instead of the stored copy, which it refreshes. */
   guide: z.string().max(100_000).optional(),
 });

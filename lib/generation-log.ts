@@ -19,6 +19,8 @@ export type GenerationLogInput = {
   warnings: string[];
   retried: boolean;
   retryReason?: string;
+  style?: "crafted";
+  angle?: string;
 };
 
 export function generationLogData(input: GenerationLogInput) {
@@ -37,6 +39,8 @@ export function generationLogData(input: GenerationLogInput) {
     warnings: input.warnings,
     retried: input.retried,
     retryReason: input.retryReason?.trim() || null,
+    // Plain drafts leave both columns to their defaults, so their insert is unchanged.
+    ...(input.style === "crafted" ? { style: "crafted", angle: input.angle?.trim() || null } : {}),
   };
 }
 
@@ -66,6 +70,8 @@ export function generationLogInput(input: {
     warnings: input.result.warnings,
     retried: input.result.retried,
     retryReason: input.result.trace.retryReason,
+    ...(input.result.trace.style ? { style: input.result.trace.style } : {}),
+    ...(input.result.trace.angle ? { angle: input.result.trace.angle } : {}),
   };
 }
 

@@ -110,6 +110,10 @@ model GenerationLog {
   warnings            String[]
   retried             Boolean  @default(false)
   retryReason         String?
+  /// "plain" or "crafted". Lets kept/edited outcomes be compared by style.
+  style               String   @default("plain")
+  /// Crafted only: the planned way in.
+  angle               String?
 
   outcome    GenerationOutcome @default(pending)
   editedBody String?

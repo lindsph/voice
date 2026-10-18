@@ -90,6 +90,8 @@ export function retrieveGolds(
     seed: string;
     k?: number;
     architecture?: string;
+    /** Crafted drafts: rotate through the closest golds by seed instead of always the same top k. */
+    rotate?: boolean;
   },
 ): Pick<Gold, "id" | "title" | "body">[] {
   const k = options.k ?? RETRIEVE_GOLD_K;
@@ -118,15 +120,21 @@ export function retrieveGolds(
   );
 
   if (anchors.length > 0) {
-    const extra = query
-      ? rest.slice(0, RETRIEVE_TAUGHT_GOLD_K)
-      : takeRotated(rest, RETRIEVE_TAUGHT_GOLD_K, options.seed);
+    const extra = !query
+      ? takeRotated(rest, RETRIEVE_TAUGHT_GOLD_K, options.seed)
+      : options.rotate
+        ? takeRotated(rest.slice(0, RETRIEVE_TAUGHT_GOLD_K * 2), RETRIEVE_TAUGHT_GOLD_K, options.seed)
+        : rest.slice(0, RETRIEVE_TAUGHT_GOLD_K);
     return [...anchors, ...extra].map(goldBody);
   }
 
   const ranked = rankGoldsByOverlap(own, query);
   const picked =
-    !query && ranked.length > k ? takeRotated(ranked, k, options.seed) : ranked.slice(0, k);
+    !query && ranked.length > k
+      ? takeRotated(ranked, k, options.seed)
+      : options.rotate
+        ? takeRotated(ranked.slice(0, k * 2), k, options.seed)
+        : ranked.slice(0, k);
   return picked.map(goldBody);
 }
 
@@ -164,7 +172,7 @@ function takeRotated<T extends { id: string }>(ranked: T[], k: number, seed: str
   return picked;
 }
 
-function hashString(value: string): number {
+export function hashString(value: string): number {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
     hash = (hash * 31 + value.charCodeAt(index)) >>> 0;

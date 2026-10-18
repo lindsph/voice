@@ -86,6 +86,8 @@ export type ToneBundleInput = {
       Partial<Pick<Gold, "profileId" | "status" | "rejected" | "architecture">>
   >;
   architecture?: string;
+  /** Crafted drafts rotate golds by seed. */
+  rotateGolds?: boolean;
   learnings: Array<
     Pick<Learning, "rule" | "status"> &
       Partial<
@@ -141,6 +143,7 @@ export function collectToneSelection(input: ToneBundleInput): ToneSelection {
     query,
     seed: input.seed,
     architecture: input.architecture,
+    rotate: input.rotateGolds,
   }).map((item) => ({
     ...item,
     reason: goldReason(byId.get(item.id), { query, architecture, untypedFallback }),

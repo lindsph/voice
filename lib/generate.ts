@@ -1,6 +1,14 @@
 import { BLOG_SHAPE_INSTRUCTION, blogDraftIssues, blogProse, blogReaderText } from "./blog-shape";
 import { collectToneSelection, formatToneBundle, type ToneBundleInput } from "./bundle";
 import {
+  buildAnglePrompt,
+  craftPromptBlock,
+  type DraftStyle,
+  isCrafted,
+  parseAngles,
+  pickAngle,
+} from "./crafted";
+import {
   parseShopifyHeadline,
   SHOPIFY_HEADLINE_INSTRUCTION,
   SHOPIFY_HEADLINE_TASK,
@@ -50,7 +58,13 @@ export const DRAFT_TIMEOUT_MS = 45_000;
  */
 export const CLAUDE_DRAFT_TIMEOUT_MS = 4 * 60 * 1000;
 
-export type ChatComplete = (input: { system: string; user: string }) => Promise<string>;
+/** Claude's effort. Plain drafts use medium; crafted drafts think harder. */
+export type ClaudeEffort = "low" | "medium" | "high";
+export const CRAFTED_EFFORT: ClaudeEffort = "high";
+/** The angle plan is a short list, not a draft. */
+export const ANGLE_EFFORT: ClaudeEffort = "low";
+
+export type ChatComplete = (input: { system: string; user: string; effort?: ClaudeEffort }) => Promise<string>;
 
 export function unwrapDraft(text: string): string {
   let body = text.trim();
@@ -87,6 +101,15 @@ function promptSurface(input: {
   return { ...surface, hint: PASSAGE_EDIT_HINT, maxWords: null };
 }
 
+/** Crafted applies to whole pieces only. A one-line Shopify field or a passage edit stays plain. */
+export function craftedApplies(input: {
+  style?: DraftStyle;
+  format?: "blog" | "plain";
+  task?: ShopifyTask;
+}): boolean {
+  return isCrafted(input.style) && !input.task && input.format !== "plain";
+}
+
 export function buildUserPrompt(input: {
   profile: Profile;
   surfaceId: string;
@@ -97,6 +120,9 @@ export function buildUserPrompt(input: {
   architecture?: string;
   format?: "blog" | "plain";
   task?: ShopifyTask;
+  style?: DraftStyle;
+  /** Crafted only: the planned way in. */
+  angle?: string;
   retryContext?: string;
 }): string {
   if (input.task === SHOPIFY_HEADLINE_TASK || input.task === SHOPIFY_EXCERPT_TASK) {
@@ -129,6 +155,7 @@ export function buildUserPrompt(input: {
   }
   const blogShape = isBlogShape(input);
   const surface = promptSurface(input);
+  const crafted = craftedApplies(input);
   return [
     `Write for the “${input.profile.name}” voice.`,
     surface?.hint ?? `Surface: ${input.surfaceId}`,
@@ -148,7 +175,9 @@ export function buildUserPrompt(input: {
       architecture: input.architecture,
       golds: input.golds,
       learnings: input.learnings,
+      ...(crafted ? { rotateGolds: true } : {}),
     }),
+    ...(crafted ? ["", craftPromptBlock(input.angle)] : []),
     ...(input.retryContext
       ? ["", "Previous draft failed a standing rule. Rewrite from scratch and fix:", input.retryContext]
       : []),
@@ -166,6 +195,7 @@ function draftHits(
     surfaceId: string;
     format?: "blog" | "plain";
     task?: ShopifyTask;
+    style?: DraftStyle;
   },
 ): string[] {
   const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
@@ -200,6 +230,7 @@ function draftHits(
     banned: input.profile.bannedForPrompt,
     surfaceId: input.surfaceId,
     maxWords: surface?.maxWords,
+    ...(craftedApplies(input) ? { crafted: true } : {}),
   });
   // Title, meta description, excerpt, headings and FAQ questions are what
   // readers and Google see first; banned phrases there count too.
@@ -231,9 +262,14 @@ function draftTrace(
     learnings: ToneBundleInput["learnings"];
     architecture?: string;
     model?: string;
+    format?: "blog" | "plain";
+    task?: ShopifyTask;
+    style?: DraftStyle;
+    angle?: string;
   },
   retryHits: string[] | null,
 ): DraftTrace {
+  const crafted = craftedApplies(input);
   const surface = input.profile.surfaces.find((item) => item.id === input.surfaceId);
   const selection = collectToneSelection({
     guide: input.profile.guide,
@@ -246,6 +282,7 @@ function draftTrace(
     architecture: input.architecture,
     golds: input.golds,
     learnings: input.learnings,
+    ...(crafted ? { rotateGolds: true } : {}),
   });
   const architecture = input.architecture?.trim();
   return {
@@ -258,6 +295,8 @@ function draftTrace(
     bannedPhrasesChecked: selection.bannedPhrasesChecked,
     seed: input.seed,
     ...(architecture ? { architecture } : {}),
+    ...(crafted ? { style: "crafted" as const } : {}),
+    ...(crafted && input.angle ? { angle: input.angle } : {}),
     ...(retryHits && retryHits.length > 0 ? { retryReason: formatRetryReason(retryHits) } : {}),
     selectedGolds: selection.golds.map(({ id, title, reason }) => ({ id, title, reason })),
     selectedLearnings: selection.learnings.map((item) => ({
@@ -274,7 +313,7 @@ function draftTrace(
 }
 
 export async function generateDraft(
-  input: {
+  request: {
     profile: Profile;
     surfaceId: string;
     facts: string;
@@ -285,9 +324,12 @@ export async function generateDraft(
     format?: "blog" | "plain";
     task?: ShopifyTask;
     model?: string;
+    style?: DraftStyle;
   },
   complete: ChatComplete,
 ): Promise<{ body: string; bundle: string; retried: boolean; warnings: string[]; trace: DraftTrace }> {
+  const angle = craftedApplies(request) ? await planAngle(request, complete) : undefined;
+  const input = angle ? { ...request, angle } : request;
   const user = buildUserPrompt(input);
   const first = unwrapDraft(await complete({ system: input.profile.systemPrompt, user }));
   const hits = draftHits(first, input);
@@ -317,6 +359,28 @@ export async function generateDraft(
     warnings: draftHits(body, input),
     trace: draftTrace(input, hits),
   };
+}
+
+/**
+ * One short call for three ways in, then the seed picks one. A failed or
+ * unreadable plan is not a failed draft: the craft block still applies.
+ */
+export async function planAngle(
+  input: { profile: Profile; surfaceId: string; facts: string; seed: string; format?: "blog" | "plain" },
+  complete: ChatComplete,
+): Promise<string | undefined> {
+  try {
+    const prompt = buildAnglePrompt({
+      profileName: input.profile.name,
+      surfaceHint: promptSurface(input)?.hint,
+      facts: input.facts,
+    });
+    const text = unwrapDraft(await complete({ ...prompt, effort: ANGLE_EFFORT }));
+    return pickAngle(parseAngles(text), input.seed);
+  } catch (error) {
+    console.error("Angle plan failed; writing without one", error);
+    return undefined;
+  }
 }
 
 function headlineBody(task: ShopifyTask | undefined, body: string): string {
@@ -371,6 +435,7 @@ export async function completeWithAnthropic(input: {
   user: string;
   model: string;
   temperature?: number;
+  effort?: ClaudeEffort;
   fetchImpl?: typeof fetch;
 }): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
@@ -417,6 +482,7 @@ export function anthropicDraftBody(input: {
   user: string;
   model: string;
   temperature?: number;
+  effort?: ClaudeEffort;
 }): Record<string, unknown> {
   const model = input.model.trim();
   const body: Record<string, unknown> = {
@@ -426,7 +492,7 @@ export function anthropicDraftBody(input: {
     messages: [{ role: "user", content: input.user }],
   };
   if (claudeOmitsSampling(model)) {
-    body.output_config = { effort: "medium" };
+    body.output_config = { effort: input.effort ?? "medium" };
   } else {
     body.temperature = input.temperature ?? DRAFT_TEMPERATURE;
   }
@@ -438,6 +504,7 @@ export async function completeDraft(input: {
   user: string;
   temperature?: number;
   model?: string;
+  effort?: ClaudeEffort;
   fetchImpl?: typeof fetch;
 }): Promise<string> {
   const model = input.model?.trim() || DRAFT_MODEL;
