@@ -80,3 +80,34 @@ export function blogProse(body: string): string {
   if (typeof row.cta === "string") parts.push(row.cta);
   return parts.join("\n");
 }
+
+/**
+ * Every part of a blog draft a reader sees: the prose plus title, meta
+ * description, excerpt, section headings and FAQ questions. Banned phrases are
+ * checked across all of it; density rules (rule of three, dashes) stay on
+ * blogProse so short fields don't skew them.
+ */
+export function blogReaderText(body: string): string {
+  const row = parseBlogJson(body);
+  if (!row) return body;
+  const parts: string[] = [];
+  for (const key of ["title", "metaDescription", "excerpt"] as const) {
+    const value = (row as Record<string, unknown>)[key];
+    if (typeof value === "string") parts.push(value);
+  }
+  if (Array.isArray(row.sections)) {
+    for (const section of row.sections) {
+      const heading = (section as { heading?: unknown } | null)?.heading;
+      if (typeof heading === "string") parts.push(heading);
+    }
+  }
+  if (Array.isArray(row.faq)) {
+    for (const item of row.faq) {
+      const question = (item as { question?: unknown } | null)?.question;
+      if (typeof question === "string") parts.push(question);
+    }
+  }
+  parts.push(blogProse(body));
+  return parts.join("\n");
+}
+

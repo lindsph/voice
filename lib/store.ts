@@ -293,13 +293,17 @@ export async function learnForProfile(input: {
   let keptGold = false;
   const after = input.after?.trim() ?? "";
   if (input.keepAsGold && after) {
+    // Every status: a gold she dismissed stays dismissed when the weekly
+    // live-post sync sends the same sentence again.
     const golds = await prisma.gold.findMany({
-      where: { profileId: input.profileId, status: "active" },
-      select: { id: true, body: true, architecture: true },
+      where: { profileId: input.profileId },
+      select: { id: true, body: true, architecture: true, status: true },
     });
     const architecture = input.architecture?.trim() ?? "";
     const existing = golds.find((gold) => gold.body.trim() === after);
-    if (existing) {
+    if (existing?.status === "dismissed") {
+      // Leave it dismissed; nothing new to keep.
+    } else if (existing) {
       if (architecture && existing.architecture !== architecture) {
         await prisma.gold.update({
           where: { id: existing.id },

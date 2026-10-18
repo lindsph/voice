@@ -1,4 +1,4 @@
-import { BLOG_SHAPE_INSTRUCTION, blogDraftIssues, blogProse } from "./blog-shape";
+import { BLOG_SHAPE_INSTRUCTION, blogDraftIssues, blogProse, blogReaderText } from "./blog-shape";
 import { collectToneSelection, formatToneBundle, type ToneBundleInput } from "./bundle";
 import {
   parseShopifyHeadline,
@@ -16,7 +16,7 @@ import {
   shopifyExcerptBody,
   type ShopifyExcerptTask,
 } from "./shopify-excerpt";
-import { lintDraft } from "./slop";
+import { bannedHits, lintDraft } from "./slop";
 import type { DraftTrace, Profile } from "./types";
 
 export { ShopifyExcerptRejected, ShopifyHeadlineRejected };
@@ -195,15 +195,18 @@ function draftHits(
   }
   const blogShape = isBlogShape(input);
   const prose = blogShape ? blogProse(body) : body;
-  return [
-    ...(blogShape ? blogDraftIssues(body) : []),
-    ...lintDraft({
-      body: prose,
-      banned: input.profile.bannedForPrompt,
-      surfaceId: input.surfaceId,
-      maxWords: surface?.maxWords,
-    }),
-  ];
+  const lint = lintDraft({
+    body: prose,
+    banned: input.profile.bannedForPrompt,
+    surfaceId: input.surfaceId,
+    maxWords: surface?.maxWords,
+  });
+  // Title, meta description, excerpt, headings and FAQ questions are what
+  // readers and Google see first; banned phrases there count too.
+  const fieldBans = blogShape
+    ? bannedHits(blogReaderText(body), input.profile.bannedForPrompt).filter((hit) => !lint.includes(hit))
+    : [];
+  return [...(blogShape ? blogDraftIssues(body) : []), ...lint, ...fieldBans];
 }
 
 export function formatRetryReason(hits: string[]): string {

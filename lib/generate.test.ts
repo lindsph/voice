@@ -860,3 +860,49 @@ describe("OpenAI temperature", () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("banned phrases in blog fields", () => {
+  it("counts a banned phrase in the meta description or title, not only the body", async () => {
+    const { blogReaderText } = await import("./blog-shape");
+    const { bannedHits } = await import("./slop");
+    const body = JSON.stringify({
+      title: "How Much Wool Pellets to Use",
+      metaDescription: "Simple amounts. WoolGrown pellets are made in Ontario.",
+      excerpt: "Mix it in.",
+      lead: "Mix pellets into soil.",
+      sections: [{ heading: "Discover the rates", body: "Water well." }],
+      faq: [{ question: "Can I check out more?", answer: "Yes." }],
+      cta: "Grab a starter bag.",
+    });
+    const text = blogReaderText(body);
+    expect(text).toContain("WoolGrown pellets are made in Ontario");
+    expect(text).toContain("Discover the rates");
+    expect(text).toContain("Can I check out more?");
+    expect(bannedHits(text, ["WoolGrown pellet", "discover", "check out"])).toEqual([
+      "WoolGrown pellet",
+      "discover",
+      "check out",
+    ]);
+  });
+});
+
+describe("blog draft field bans", () => {
+  it("rewrites a blog draft whose meta description uses a banned phrase", async () => {
+    const withMeta = (meta: string) => JSON.stringify({ ...JSON.parse(validBlog), cta: "Grab a starter bag when you are ready.", metaDescription: meta });
+    const replies = [withMeta("WoolGrown pellets for every bed."), withMeta("Wool pellets for every bed.")];
+    let users: string[] = [];
+    const result = await generateDraft(
+      { ...draftInput({ ...blogProfile, bannedForPrompt: ["WoolGrown pellet"] }, "blog"), architecture: "how-to-steps" },
+      async ({ user }) => {
+        users.push(user);
+        return replies.shift()!;
+      },
+    );
+    expect(result.retried).toBe(true);
+    expect(result.trace.retryReason).toBe("banned_phrase:woolgrown pellet");
+    expect(users[1]).toContain("WoolGrown pellet");
+    expect(JSON.parse(result.body).metaDescription).toBe("Wool pellets for every bed.");
+    expect(result.warnings).toEqual([]);
+    users = [];
+  });
+});
