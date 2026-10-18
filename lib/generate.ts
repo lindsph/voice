@@ -26,7 +26,21 @@ export type ShopifyTask = ShopifyHeadlineTask | ShopifyExcerptTask;
 
 export { bannedHits } from "./slop";
 
-export const DRAFT_MODEL = process.env.OPENAI_DRAFT_MODEL?.trim() || "gpt-4o";
+/**
+ * Default for any request that names no model (excerpts, headlines, captions)
+ * and for learning from her edits. Voice audit 17–18 Oct 2026, 10 models on the
+ * six hardest requests: only Opus 5.5 passed all 18 (lengths, links, claims,
+ * no added facts) while still sounding like her; gpt-4o wrote hype in about
+ * half, and its learned rules taught the hype back. Roll back without a code
+ * change: `flyctl secrets set VOICE_DRAFT_MODEL=gpt-4o -a lindsay-voice`.
+ * OPENAI_DRAFT_MODEL is the old name, still read.
+ */
+export const DRAFT_MODEL =
+  process.env.VOICE_DRAFT_MODEL?.trim() ||
+  process.env.OPENAI_DRAFT_MODEL?.trim() ||
+  "claude-opus-5-5";
+/** OpenAI model when a caller reaches completeWithOpenAi without naming one. */
+export const OPENAI_FALLBACK_MODEL = "gpt-4o";
 export const DRAFT_TEMPERATURE = 0.45;
 /** Short OpenAI notes. Claude blog drafts use CLAUDE_DRAFT_TIMEOUT_MS. */
 export const DRAFT_TIMEOUT_MS = 45_000;
@@ -444,7 +458,7 @@ export async function completeWithOpenAi(input: {
   const client = new OpenAI({ apiKey });
   const completion = await client.chat.completions.create(
     {
-      model: input.model?.trim() || DRAFT_MODEL,
+      model: input.model?.trim() || OPENAI_FALLBACK_MODEL,
       temperature: input.temperature ?? DRAFT_TEMPERATURE,
       store: false,
       messages: [

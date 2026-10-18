@@ -10,6 +10,7 @@ import {
   completeWithAnthropic,
   CLAUDE_DRAFT_TIMEOUT_MS,
   DRAFT_MODEL,
+  OPENAI_FALLBACK_MODEL,
   DRAFT_TIMEOUT_MS,
   formatRetryReason,
   generateDraft,
@@ -480,6 +481,12 @@ describe("model routing", () => {
     expect(isClaudeModel(undefined)).toBe(false);
     expect(claudeOmitsSampling("claude-opus-5-5")).toBe(true);
     expect(claudeOmitsSampling("claude-opus-4-6")).toBe(false);
+  });
+
+  it("defaults to Opus 5.5 for writing and learning, with an OpenAI fallback that is not Claude", () => {
+    expect(process.env.VOICE_DRAFT_MODEL).toBeUndefined();
+    expect(DRAFT_MODEL).toBe("claude-opus-5-5");
+    expect(isClaudeModel(OPENAI_FALLBACK_MODEL)).toBe(false);
   });
 
   it("omits temperature on Sonnet 5.5 and on a model Voice has never seen", () => {

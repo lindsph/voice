@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   inferPreference,
   inferPreferenceHeuristic,
+  LearnModelError,
   MIN_TEACH_WORD_EDITS,
   normalizeInferredRule,
   shouldWriteLearning,
@@ -297,5 +298,25 @@ describe("normalizeInferredRule", () => {
         "Hey — random one. Happy to look if useful.",
       ),
     ).toBeNull();
+  });
+});
+
+describe("learning model failures", () => {
+  const edit = {
+    before: "Dive into our field notes and insights from the event. Read more here.",
+    after: "We came home with plenty to think about. Our field notes are on the blog.",
+  };
+
+  it("throws instead of quietly learning nothing when the model call fails", async () => {
+    await expect(
+      inferPreference(edit, async () => {
+        throw new Error("Claude draft failed (529): overloaded");
+      }),
+    ).rejects.toBeInstanceOf(LearnModelError);
+  });
+
+  it("still falls back to the heuristic when the model answers with something unusable", async () => {
+    const learned = await inferPreference(edit, async () => "");
+    expect(learned).toEqual(inferPreferenceHeuristic(edit));
   });
 });

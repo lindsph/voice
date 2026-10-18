@@ -11,11 +11,20 @@
  * rewrite it. Fact-only edits (name, number, URL) are not style — reply NONE.
  */
 
-import { completeWithOpenAi, type ChatComplete, unwrapDraft } from "./generate";
+import { completeDraft, type ChatComplete, unwrapDraft } from "./generate";
 import { isQuotedSnippetRule, ruleForPrompt, type DerivedLearning } from "./learn";
 import { classifyLearningKind, settleClassification } from "./learning-kind";
 
 export { isQuotedSnippetRule } from "./learn";
+
+/** The model call to turn an edit into a rule failed. The /learn route answers 502. */
+export class LearnModelError extends Error {
+  constructor(cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(`Learning model failed: ${detail}`);
+    this.name = "LearnModelError";
+  }
+}
 
 const MAX_RULE = 160;
 
@@ -216,7 +225,7 @@ export async function inferPreference(
   const run =
     input.complete ??
     complete ??
-    ((payload) => completeWithOpenAi({ ...payload, temperature: 0.2 }));
+    ((payload) => completeDraft({ ...payload, temperature: 0.2 }));
   if (!input.complete && !complete && skipLlm()) {
     return inferPreferenceHeuristic(input);
   }
@@ -224,8 +233,14 @@ export async function inferPreference(
   const user = inferUserPrompt(input);
   if (!user) return inferPreferenceHeuristic(input);
 
+  let raw: string;
   try {
-    const raw = await run({ system: INFER_SYSTEM, user });
+    raw = await run({ system: INFER_SYSTEM, user });
+  } catch (err) {
+    // Not "nothing to learn": the host must see this and retry the teach.
+    throw new LearnModelError(err);
+  }
+  try {
     const text = unwrapDraft(raw).trim();
     if (/^\s*NONE\b/i.test(text)) return null;
 
