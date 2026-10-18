@@ -98,6 +98,19 @@ check_models() {
 }
 check_models
 
+# Everything Command teaches Voice goes through an outbox. Anything stuck for
+# a day (Voice unreachable, key wrong) or a rule Voice refused stops the deploy,
+# so learning can't quietly break again.
+check_voice_teach() {
+  local script="$COMMAND_ROOT/web/scripts/voice-teach-outbox.ts"
+  [[ -f "$script" ]] || return 0
+  if ! with_repo_node "$COMMAND_ROOT/web" npx tsx --tsconfig tsconfig.json --env-file=.env scripts/voice-teach-outbox.ts; then
+    echo "Refuse: Voice teaching is stuck (listed above). Nothing was deployed." >&2
+    exit 1
+  fi
+}
+check_voice_teach
+
 echo "Voice checkout: $VOICE_ROOT ($(voice_sha))"
 
 if voice_needs_deploy; then
