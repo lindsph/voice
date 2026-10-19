@@ -128,6 +128,12 @@ function woolgrownSurfaces() {
       maxWords: 80,
       hint: "A caption. Short. Field-specific. CTA only if there is a real next step.",
     },
+    {
+      id: "ad",
+      label: "Ad",
+      maxWords: 120,
+      hint: "A Meta ad's primary text, then a last line \"Headline: …\" under 40 characters. Open on the reader's problem, give one concrete benefit, end with one clear next step. Same claims rules as the blog.",
+    },
   ];
 }
 

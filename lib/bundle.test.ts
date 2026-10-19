@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { collectToneSelection, extractCompactToneRules, formatToneBundle, selectGoldExamples } from "./bundle";
+import { collectToneSelection, extractCompactToneRules, formatToneBundle, selectGoldExamples, sectionToNextH2 } from "./bundle";
 
 const GUIDE = `# Lindsay
 
@@ -521,5 +521,57 @@ Wire planters and hanging baskets dry out fast.
     });
     expect(bundle).toContain("Kept how-to");
     expect(bundle).not.toContain("booth this weekend");
+  });
+});
+
+describe("surface-only guide sections", () => {
+  const guide = [
+    "## Who we sound like",
+    "",
+    "A practical Ontario grower-maker.",
+    "",
+    "## Voice rules",
+    "",
+    "Short paragraphs.",
+    "",
+    "### How sentences open and flow",
+    "",
+    "Short hooks.",
+    "",
+    "### Warmth",
+    "",
+    "Friendly.",
+    "",
+    "## Banned / flagged phrases",
+    "",
+    "- guaranteed",
+    "",
+    "## Publish",
+    "",
+    "Theme owns styling.",
+    "",
+    "## Example paragraphs (gold tone)",
+    "",
+    "> Garden wool update.",
+    "",
+    "## Ads",
+    "",
+    "- Shape: problem, reframe, how it works, one small ask.",
+    "- Headline: 40 characters or fewer.",
+  ].join("\n");
+
+  it("adds the Ads section for the ad surface only", () => {
+    const ad = extractCompactToneRules(guide, "ad");
+    expect(ad).toContain("## Ads\n\n- Shape: problem, reframe, how it works, one small ask.");
+    expect(ad).toContain("Headline: 40 characters or fewer.");
+    for (const surface of ["blog", "social", "shop_faq", undefined]) {
+      expect(extractCompactToneRules(guide, surface)).not.toContain("## Ads");
+    }
+  });
+
+  it("stops the section at the next ## heading and skips a guide without one", () => {
+    expect(sectionToNextH2(`${guide}\n\n## Later\n\nNot ads.`, "## Ads")).not.toContain("Not ads.");
+    expect(sectionToNextH2("## Voice rules\n\nx", "## Ads")).toBe("");
+    expect(extractCompactToneRules("## Who we sound like\n\nx\n\n## Voice rules\n", "ad")).not.toContain("## Ads");
   });
 });

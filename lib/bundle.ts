@@ -3,7 +3,28 @@ import { retrieveGolds, retrieveLearnings } from "./retrieve";
 import { bannedPhrasesChecked, SHARED_SLOP_PROMPT } from "./slop";
 import type { Gold, Learning, Surface } from "./types";
 
-export function extractCompactToneRules(toneDoc: string): string {
+/** Sections a host's guide can add for one surface only, e.g. "## Ads" for the ad surface. */
+export const SURFACE_GUIDE_SECTIONS: Record<string, string> = {
+  ad: "## Ads",
+};
+
+/** From a "## " heading to the next "## " heading or the end of the guide. */
+export function sectionToNextH2(doc: string, heading: string): string {
+  const start = doc.search(new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "m"));
+  if (start === -1) return "";
+  const from = start + heading.length;
+  const next = doc.slice(from).search(/^## /m);
+  return (next === -1 ? doc.slice(from) : doc.slice(from, from + next)).trim();
+}
+
+export function extractCompactToneRules(toneDoc: string, surfaceId?: string): string {
+  const base = extractBaseToneRules(toneDoc);
+  const heading = surfaceId ? SURFACE_GUIDE_SECTIONS[surfaceId] : undefined;
+  const extra = heading ? sectionToNextH2(toneDoc, heading) : "";
+  return extra ? `${base}\n\n${heading}\n\n${extra}` : base;
+}
+
+function extractBaseToneRules(toneDoc: string): string {
   const headings = [
     ["## Who this sounds like", "## Voice rules"],
     ["## Who we sound like", "## Voice rules"],
@@ -224,7 +245,7 @@ export function formatToneBundle(input: ToneBundleInput): string {
 
   return [
     "Tone rules (always follow):",
-    extractCompactToneRules(input.guide),
+    extractCompactToneRules(input.guide, input.surfaceId),
     "",
     banned,
     "",
