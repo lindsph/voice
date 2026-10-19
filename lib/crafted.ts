@@ -66,11 +66,25 @@ export function pickAngle(angles: string[], seed: string): string | undefined {
   return angles[hashString(seed) % angles.length];
 }
 
-export function craftPromptBlock(angle?: string): string {
+/**
+ * The craft notes. A blog post keeps its lead plain and answer-first (readers
+ * and search come for the answer); the angle and the scene start the first
+ * section instead.
+ */
+export function craftPromptBlock(angle?: string, options: { blog?: boolean } = {}): string {
+  const opening = options.blog
+    ? [
+        "- The lead stays plain and answer-first: give the answer in its first two sentences, with the concrete step or amount from the facts. No scene in the lead.",
+        ...(angle ? [`- Angle: ${angle} Use it to open the first section, then carry it through the sections.`] : []),
+        "- Open the first section on something specific (a moment, a place, a season, a thing in someone's hands), not a summary.",
+      ]
+    : [
+        ...(angle ? [`- Angle: ${angle} Build the piece around it.`] : []),
+        "- Open on something specific (a moment, a place, a season, a thing in someone's hands), not a summary.",
+      ];
   return [
     "Craft (this draft is written with more life):",
-    ...(angle ? [`- Angle: ${angle} Build the piece around it.`] : []),
-    "- Open on something specific (a moment, a place, a season, a thing in someone's hands), not a summary.",
+    ...opening,
     "- Use concrete, sensory detail from the world this voice lives in, as description only.",
     "- One image or comparison is welcome if it makes the idea clearer. Only one.",
     "- Vary the rhythm: let a short sentence land after a longer one.",

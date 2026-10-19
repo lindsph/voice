@@ -177,7 +177,7 @@ export function buildUserPrompt(input: {
       learnings: input.learnings,
       ...(crafted ? { rotateGolds: true } : {}),
     }),
-    ...(crafted ? ["", craftPromptBlock(input.angle)] : []),
+    ...(crafted ? ["", craftPromptBlock(input.angle, { blog: blogShape })] : []),
     ...(input.retryContext
       ? ["", "Previous draft failed a standing rule. Rewrite from scratch and fix:", input.retryContext]
       : []),

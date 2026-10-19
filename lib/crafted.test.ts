@@ -73,6 +73,16 @@ describe("crafted prompt", () => {
     expect(prompt).toContain("assert nothing new");
   });
 
+  it("keeps a crafted blog post's lead plain and answer-first, with the angle opening the first section", () => {
+    const blog = craftPromptBlock("A dry August evening.", { blog: true });
+    expect(blog).toContain("The lead stays plain and answer-first");
+    expect(blog).toContain("Use it to open the first section");
+    expect(blog).not.toContain("Build the piece around it");
+    const caption = craftPromptBlock("A dry August evening.");
+    expect(caption).toContain("Build the piece around it");
+    expect(caption).not.toContain("The lead stays plain");
+  });
+
   it("keeps passage edits and Shopify fields plain", () => {
     expect(craftedApplies({ style: "crafted", format: "plain" })).toBe(false);
     expect(craftedApplies({ style: "crafted", task: "shopify_headline" })).toBe(false);
