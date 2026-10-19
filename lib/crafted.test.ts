@@ -157,8 +157,8 @@ describe("crafted gold rotation", () => {
 describe("crafted lint and log", () => {
   const caption = "Spread it, water it in, and let it work.";
 
-  it("lets a crafted caption keep one list of three", () => {
-    expect(slopHits(caption, { surfaceId: "social" })).toContain("rule-of-three stack (1)");
+  it("lets a caption keep one list of three, plain or crafted", () => {
+    expect(slopHits(caption, { surfaceId: "social" })).toEqual([]);
     expect(slopHits(caption, { surfaceId: "social", crafted: true })).toEqual([]);
   });
 

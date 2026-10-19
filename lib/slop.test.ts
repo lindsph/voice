@@ -75,25 +75,28 @@ describe("slop lint", () => {
     ).toContain("it's not X, it's Y (2 times)");
   });
 
-  it("flags a caption tricolon and two in a blog", () => {
+  it("allows one list of three in a caption or FAQ answer, and flags a second", () => {
+    const one = "Wool holds moisture, feeds soil, and skips plastic.";
+    expect(slopHits(one, { surfaceId: "social", maxWords: 80 })).toEqual([]);
+    expect(slopHits(one, { surfaceId: "shop_faq", maxWords: 120 })).toEqual([]);
     expect(
-      slopHits("Wool holds moisture, feeds soil, and skips plastic.", {
-        surfaceId: "social",
-        maxWords: 80,
-      }),
-    ).toContain("rule-of-three stack (1)");
-    expect(
-      slopHits("Tuck wool around the crown, water it in, and leave it.", {
-        surfaceId: "blog",
-        maxWords: null,
-      }),
-    ).toEqual([]);
-    expect(
-      slopHits(
-        "Wool holds moisture, feeds soil, and skips plastic. It saves time, cuts waste, and feeds beds.",
-        { surfaceId: "blog", maxWords: null },
-      ),
+      slopHits(`${one} It saves time, cuts waste, and feeds beds.`, { surfaceId: "social", maxWords: 80 }),
     ).toContain("rule-of-three stack (2)");
+  });
+
+  it("passes Lindsey's own founder line as a caption", () => {
+    const founder =
+      "Hi! I’m Lindsey, the founder of WoolGrown — a proudly Canadian company turning locally grown wool into natural, biodegradable fabrics and materials for gardening, landscaping and agriculture.";
+    expect(slopHits(founder, { surfaceId: "social", maxWords: 80 })).toEqual([]);
+  });
+
+  it("allows about one list of three per 150 words in a blog, at least two", () => {
+    const two = "Wool holds moisture, feeds soil, and skips plastic. It saves time, cuts waste, and feeds beds.";
+    expect(slopHits(two, { surfaceId: "blog", maxWords: null })).toEqual([]);
+    const three = `${two} Pots dry out fast, beds crack open, and roots go thirsty.`;
+    expect(slopHits(three, { surfaceId: "blog", maxWords: null })).toContain("rule-of-three stack (3)");
+    const filler = Array.from({ length: 450 }, () => "word").join(" ");
+    expect(slopHits(`${three} ${filler}`, { surfaceId: "blog", maxWords: null })).toEqual([]);
   });
 
   it("flags two em dashes in a caption, not three in a first note", () => {

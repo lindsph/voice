@@ -37,10 +37,13 @@ const ANTITHESIS =
 const TRICOLON =
   /\b((?:[A-Za-z']+\s+){1,4}[A-Za-z']+),\s+((?:[A-Za-z']+\s+){1,4}[A-Za-z']+),?\s+and\s+((?:[A-Za-z']+\s+){1,4}[A-Za-z']+)/g;
 
+/** Longer writing may use one list of three per this many words. */
+export const TRICOLON_WORDS_EACH = 150;
+
 export type SlopSurface = {
   surfaceId: string;
   maxWords?: number | null;
-  /** Crafted drafts may use one list of three in a caption. */
+  /** Crafted drafts. Lists of three are now allowed the same way for both styles. */
   crafted?: boolean;
 };
 
@@ -131,7 +134,12 @@ export function slopHits(body: string, surface: SlopSurface): string[] {
   }
 
   const stacks = findTricolons(text);
-  const tricolonLimit = isCaptionSurface(surface) && !surface.crafted ? 0 : 1;
+  // A list of three is normal writing ("pots, raised beds and planting holes");
+  // only a pile of them reads as AI. One per caption, FAQ answer, note or ad;
+  // on longer writing, about one per 150 words (at least two).
+  const words = text.split(/\s+/).filter(Boolean).length;
+  const tricolonLimit =
+    isCaptionSurface(surface) || isNoteSurface(surface) ? 1 : Math.max(2, Math.floor(words / TRICOLON_WORDS_EACH));
   if (stacks.length > tricolonLimit) {
     hits.push(`rule-of-three stack (${stacks.length})`);
   }
