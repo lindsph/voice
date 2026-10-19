@@ -8,6 +8,7 @@ import {
   isLearningKind,
   resolveLearningKind,
 } from "./learning-kind";
+import { planGoldSetSync, type GoldSetItem } from "./gold-set";
 import { goldTitleFromPassage, herWritingSource } from "./her-writing";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
 import type { DraftTrace, Gold, GoldUpdate, Learning, Profile, Surface } from "./types";
@@ -401,6 +402,52 @@ export async function addHerWriting(input: {
     added += 1;
   }
   return { added, skipped };
+}
+
+/** Make the host's set of golds (one source, one surface) match `items`. */
+export async function syncGoldSet(input: {
+  profileId: string;
+  surface: string;
+  source: string;
+  items: GoldSetItem[];
+}): Promise<{ added: number; kept: number; retitled: number; dismissed: number }> {
+  const profile = await getProfile(input.profileId);
+  if (!profile.surfaces.some((item) => item.id === input.surface)) {
+    throw new Error(`Unknown surface: ${input.surface}`);
+  }
+  const existing = await prisma.gold.findMany({
+    where: { profileId: input.profileId },
+    select: { id: true, body: true, title: true, source: true, surface: true, status: true },
+  });
+  const plan = planGoldSetSync({
+    existing: existing.map((gold) => ({ ...gold, status: gold.status === "dismissed" ? "dismissed" : "active" })),
+    items: input.items,
+    source: input.source,
+    surface: input.surface,
+  });
+  const stamp = new Date();
+  await prisma.$transaction([
+    ...plan.add.map((item, index) =>
+      prisma.gold.create({
+        data: {
+          id: uniqueId("gold", input.profileId, input.surface, String(index + 1)),
+          profileId: input.profileId,
+          title: item.title,
+          body: item.body,
+          rejected: "",
+          source: input.source,
+          surface: input.surface,
+          architecture: "",
+          canonical: false,
+          status: "active",
+          createdAt: stamp,
+        },
+      }),
+    ),
+    ...plan.retitle.map((item) => prisma.gold.update({ where: { id: item.id }, data: { title: item.title } })),
+    ...plan.dismiss.map((id) => prisma.gold.update({ where: { id }, data: { status: "dismissed" } })),
+  ]);
+  return { added: plan.add.length, kept: plan.keep, retitled: plan.retitle.length, dismissed: plan.dismiss.length };
 }
 
 export async function dismissLearning(id: string): Promise<Learning> {
