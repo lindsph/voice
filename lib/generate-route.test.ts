@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { maxDuration, POST } from "../app/api/profiles/[id]/generate/route";
-import { generateErrorStatus } from "./generate-error";
+import { DRAFT_ERROR, generateErrorStatus, publicDraftError } from "./generate-error";
 import { generateForProfile } from "@/lib/store";
 import type { DraftTrace } from "./types";
 
@@ -114,6 +114,41 @@ describe("POST /api/profiles/:id/generate", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Claude draft timed out after 4 minutes (claude-opus-4-6).",
     });
+  });
+
+  it("never sends the provider's raw reply to the person drafting, and logs it instead", async () => {
+    const raw =
+      'Claude draft failed (400): {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."},"request_id":"req_1"}';
+    vi.mocked(generateForProfile).mockRejectedValue(Object.assign(new Error(raw), { status: 400 }));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = await POST(request({ surface: "blog", facts: "Raised beds." }), {
+        params: Promise.resolve({ id: "woolgrown" }),
+      });
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body).toEqual({ error: DRAFT_ERROR.noCredit });
+      expect(JSON.stringify(body)).not.toContain("request_id");
+      expect(log).toHaveBeenCalledWith(`[generate] ${raw}`);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("turns each kind of model failure into a plain sentence", () => {
+    const err = (message: string, status?: number) =>
+      [status === undefined ? new Error(message) : Object.assign(new Error(message), { status }), message] as const;
+    expect(publicDraftError(...err("Claude draft failed (400): Your credit balance is too low", 400))).toBe(DRAFT_ERROR.noCredit);
+    expect(publicDraftError(...err('Claude draft failed (401): {"error":{"type":"authentication_error"}}', 401))).toBe(DRAFT_ERROR.key);
+    expect(publicDraftError(...err("Add ANTHROPIC_API_KEY to Voice’s .env."))).toBe(DRAFT_ERROR.key);
+    expect(publicDraftError(...err("Claude draft failed (529): overloaded", 529))).toBe(DRAFT_ERROR.busy);
+    expect(publicDraftError(...err("Claude draft failed (429): rate_limit_error", 429))).toBe(DRAFT_ERROR.busy);
+    expect(publicDraftError(...err("Claude draft failed (500): internal", 500))).toBe(DRAFT_ERROR.server);
+    expect(publicDraftError(...err('Claude draft failed (404): {"error":{"message":"model not found"}}', 404))).toBe(DRAFT_ERROR.other);
+    expect(publicDraftError(...err("The model returned an empty draft."))).toBe(DRAFT_ERROR.other);
+    expect(publicDraftError(...err("Claude draft timed out after 4 minutes (claude-opus-4-6).", 504))).toBe(
+      "Claude draft timed out after 4 minutes (claude-opus-4-6).",
+    );
   });
 
   it("keeps a missing model key unavailable", () => {
