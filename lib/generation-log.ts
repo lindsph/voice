@@ -199,3 +199,41 @@ export async function updateGenerationOutcome(
     throw error;
   }
 }
+
+/** Most drafts a host can ask for in one read. */
+export const SURFACE_DRAFTS_LIMIT = 500;
+
+export type SurfaceDraft = {
+  id: string;
+  createdAt: string;
+  style: string;
+  angle: string | null;
+  facts: string;
+  generatedBody: string;
+  editedBody: string | null;
+  outcome: GenerationOutcome;
+};
+
+/**
+ * Every logged draft on one surface, newest first, with only what a host
+ * needs to recognise its own copy later (e.g. WoolGrown matching a live Meta
+ * ad back to the Voice draft it came from). Read-only.
+ */
+export async function listSurfaceDrafts(profileId: string, surfaceId: string): Promise<SurfaceDraft[]> {
+  const rows = await prisma.generationLog.findMany({
+    where: { profileId, surfaceId },
+    orderBy: { createdAt: "desc" },
+    take: SURFACE_DRAFTS_LIMIT,
+    select: {
+      id: true,
+      createdAt: true,
+      style: true,
+      angle: true,
+      facts: true,
+      generatedBody: true,
+      editedBody: true,
+      outcome: true,
+    },
+  });
+  return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString(), outcome: asOutcome(row.outcome) }));
+}
