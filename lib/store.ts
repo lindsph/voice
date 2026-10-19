@@ -9,6 +9,7 @@ import {
   resolveLearningKind,
 } from "./learning-kind";
 import { planGoldSetSync, type GoldSetItem } from "./gold-set";
+import { GUIDE_EXAMPLES_SOURCE, guideExampleParagraphs } from "./guide-examples";
 import { goldTitleFromPassage, herWritingSource } from "./her-writing";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
 import type { DraftTrace, Gold, GoldUpdate, Learning, Profile, Surface } from "./types";
@@ -216,6 +217,11 @@ export async function generateForProfile(input: {
     } catch (error) {
       console.error("Failed to refresh stored guide", error);
     }
+    try {
+      await syncGuideExamples(input.profileId, sentGuide);
+    } catch (error) {
+      console.error("Failed to sync the guide's example paragraphs", error);
+    }
   }
   const result = await generateDraft(
     {
@@ -402,6 +408,17 @@ export async function addHerWriting(input: {
     added += 1;
   }
   return { added, skipped };
+}
+
+/**
+ * Keep the guide's approved example paragraphs as blog golds. A guide with no
+ * example section changes nothing, so dropping the section by accident can't
+ * dismiss them all.
+ */
+export async function syncGuideExamples(profileId: string, guide: string) {
+  const items = guideExampleParagraphs(guide);
+  if (items.length === 0) return null;
+  return syncGoldSet({ profileId, surface: "blog", source: GUIDE_EXAMPLES_SOURCE, items });
 }
 
 /** Make the host's set of golds (one source, one surface) match `items`. */

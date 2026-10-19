@@ -6,6 +6,8 @@ const findUnique = vi.hoisted(() => vi.fn());
 const golds = vi.hoisted(() => vi.fn());
 const learnings = vi.hoisted(() => vi.fn());
 const profileUpdate = vi.hoisted(() => vi.fn());
+const goldCreate = vi.hoisted(() => vi.fn((args: unknown) => args));
+const transaction = vi.hoisted(() => vi.fn(async (ops: unknown[]) => ops));
 
 vi.mock("./generation-log", async () => {
   const actual = await vi.importActual<typeof import("./generation-log")>("./generation-log");
@@ -20,7 +22,8 @@ vi.mock("./generate", async () => {
 vi.mock("./db", () => ({
   prisma: {
     profile: { findUnique, update: profileUpdate },
-    gold: { findMany: golds },
+    gold: { findMany: golds, create: goldCreate, update: vi.fn() },
+    $transaction: transaction,
     learning: { findMany: learnings },
   },
 }));
@@ -139,5 +142,43 @@ describe("generateForProfile logging", () => {
     expect(generateDraft.mock.calls.at(-1)?.[0].profile.guide).toBe("Practical.");
     await generateForProfile({ profileId: "woolgrown", surface: "blog", facts: "Raised beds.", guide: " Practical. " });
     expect(profileUpdate).not.toHaveBeenCalled();
+  });
+  it("keeps the guide's example paragraphs as blog golds when the host sends a changed guide", async () => {
+    profileUpdate.mockReset();
+    goldCreate.mockClear();
+    findUnique.mockResolvedValue({
+      id: "woolgrown",
+      name: "WoolGrown",
+      description: "",
+      guide: "Practical.",
+      systemPrompt: "Write.",
+      bannedForPrompt: "[]",
+      surfaces: JSON.stringify([{ id: "blog", label: "Blog", maxWords: null, hint: "" }]),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    profileUpdate.mockImplementation(async ({ data }: { data: { guide: string } }) => ({
+      id: "woolgrown",
+      name: "WoolGrown",
+      description: "",
+      guide: data.guide,
+      systemPrompt: "Write.",
+      bannedForPrompt: "[]",
+      surfaces: "[]",
+      updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+    }));
+    await generateForProfile({
+      profileId: "woolgrown",
+      surface: "blog",
+      facts: "Raised beds.",
+      guide: "## Example paragraphs\n\n### Field proof\n\n> Garden wool update — 8 months later.\n",
+    });
+    expect(goldCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        body: "Garden wool update — 8 months later.",
+        title: "Field proof",
+        surface: "blog",
+        source: "Example paragraph in the tone guide (kept in step)",
+      }),
+    });
   });
 });
