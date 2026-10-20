@@ -1,0 +1,40 @@
+---
+description: Local .env database URLs are LIVE — never reset, drop, push or migrate them without the human's explicit OK
+alwaysApply: true
+---
+
+# No destructive database commands
+
+On 20 Oct 2026 an agent ran `prisma migrate diff --from-migrations … --shadow-database-url <DIRECT_URL>` to preview a migration. Prisma wipes its shadow database, and that URL was Voice's production database: every profile, gold, rule and log was erased. It was restored from a Neon point-in-time branch with no loss, but only because the 6-hour Free-plan history window was still open.
+
+## Facts
+
+- `web/.env` (WoolGrown) and `voice/.env` point at the **live** Neon databases. There is no local-only database.
+- One Neon branch holds `neondb` (WoolGrown), `voice`, `lindsay` and the test databases. A branch-wide restore rolls all of them back.
+
+## Never (an agent does not run these at all)
+
+- Any Prisma shadow database (`--shadow-database-url`, `shadowDatabaseUrl`)
+- `prisma migrate reset`, `prisma migrate dev`, `prisma db push --force-reset`
+- `dropdb`, `DROP DATABASE`, `DROP SCHEMA`
+
+## Only with the human's explicit OK for that exact command
+
+- `prisma migrate deploy`, `prisma db push`, `npm run db:push*`, `prisma db execute`
+- `pg_restore`, `TRUNCATE`, `DROP TABLE`, `DELETE FROM`, `ALTER TABLE`, raw SQL writes, `deleteMany` / `updateMany` scripts
+
+Before asking, say which host and database the command targets.
+
+## Previewing a migration safely
+
+Diff schema files, which needs no database:
+
+```
+npx prisma migrate diff --from-schema-datamodel <old schema file> --to-schema-datamodel prisma/schema.prisma --script
+```
+
+(Get the old schema with `git show HEAD:prisma/schema.prisma > /tmp/old.prisma`.) To rehearse against real data, ask the human to create a Neon branch and use that branch's URL only.
+
+## Enforcement
+
+A Claude Code PreToolUse hook (`~/.claude/hooks/db-guard.py`) denies the "Never" list and forces a permission prompt for the rest.
