@@ -3,7 +3,8 @@
  * a person: a duplicate of a live rule is merged, a contradiction or a rule that
  * loosens the claims posture is held, and anything else goes live as today.
  *
- * Prototype: not wired into saving yet (see the voice-rule-self-check card).
+ * The model is asked twice and only a matching answer counts, because one
+ * answer alone changed between runs on the same rule.
  */
 
 import { unwrapDraft, type ChatComplete } from "./generate";
@@ -14,6 +15,11 @@ export type RuleVerdict =
   | { verdict: "claims"; reason: string };
 
 export type LiveRule = { id: string; rule: string };
+
+/** Off in tests and when model calls are disabled (VOICE_DISABLE=1), as inference is. */
+export function ruleCheckEnabled(): boolean {
+  return !process.env.VITEST && process.env.VOICE_DISABLE !== "1";
+}
 
 const CLAIMS_HEADINGS = ["### How we make claims", "## Claims posture"];
 
@@ -79,7 +85,7 @@ export function parseRuleVerdict(text: string, live: LiveRule[]): RuleVerdict | 
   return null;
 }
 
-/** A failed or unreadable check lets the rule go live, which is what happens today. */
+/** One model answer. A failed or unreadable check lets the rule go live, as today. */
 export async function checkNewRule(
   input: { rule: string; surface: string; live: LiveRule[]; guide: string },
   complete: ChatComplete,
@@ -93,4 +99,19 @@ export async function checkNewRule(
   } catch {
     return { verdict: "new", reason: "Check failed; kept as today." };
   }
+}
+
+function sameVerdict(a: RuleVerdict, b: RuleVerdict): boolean {
+  if (a.verdict !== b.verdict) return false;
+  return !("ruleId" in a) || ("ruleId" in b && a.ruleId === b.ruleId);
+}
+
+/** Asks twice; acts only when both answers match, otherwise the rule goes live as today. */
+export async function decideNewRule(
+  input: { rule: string; surface: string; live: LiveRule[]; guide: string },
+  complete: ChatComplete,
+): Promise<RuleVerdict> {
+  const [first, second] = await Promise.all([checkNewRule(input, complete), checkNewRule(input, complete)]);
+  if (first.verdict === "new" || sameVerdict(first, second)) return first;
+  return { verdict: "new", reason: "The two checks disagreed; kept as today." };
 }

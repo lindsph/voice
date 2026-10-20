@@ -224,7 +224,8 @@ describe("enum migration", () => {
 
   it("matches the Prisma client enums to those same values", () => {
     expect(Object.values(GoldStatus).sort()).toEqual(["active", "dismissed"]);
-    expect(Object.values(LearningStatus).sort()).toEqual(["active", "dismissed"]);
+    // blocked, merged and retired come from the rule check; only active reaches prompts.
+    expect(Object.values(LearningStatus).sort()).toEqual(["active", "blocked", "dismissed", "merged", "retired"]);
     expect(Object.values(LearningKind).sort()).toEqual(["fact", "unknown", "voice"]);
     expect(Object.values(ClassificationSource).sort()).toEqual([
       "fallback",

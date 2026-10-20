@@ -12,6 +12,7 @@ import { planGoldSetSync, type GoldSetItem } from "./gold-set";
 import { GUIDE_EXAMPLES_SOURCE, guideExampleParagraphs } from "./guide-examples";
 import { goldTitleFromPassage, herWritingSource } from "./her-writing";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
+import { decideNewRule, ruleCheckEnabled, type RuleVerdict } from "./rule-check";
 import type { DraftTrace, Gold, GoldUpdate, Learning, Profile, Surface } from "./types";
 
 function iso(value: Date): string {
@@ -96,7 +97,8 @@ function toLearning(row: {
     id: row.id,
     profileId: row.profileId,
     rule: row.rule,
-    status: row.status === "dismissed" ? "dismissed" : "active",
+    // blocked, merged and retired rules are held back from prompts like dismissed ones.
+    status: row.status === "active" ? "active" : "dismissed",
     before: row.before,
     after: row.after,
     why: row.why,
@@ -287,7 +289,7 @@ export async function learnForProfile(input: {
 
   const existing = await prisma.learning.findMany({
     where: { profileId: input.profileId, status: "active" },
-    select: { rule: true },
+    select: { id: true, rule: true, surface: true },
   });
   const seen = new Set(existing.map((row) => row.rule.toLowerCase()));
   let learningCount = 0;
@@ -295,12 +297,18 @@ export async function learnForProfile(input: {
     const key = item.rule.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
+    const verdict = await checkRuleBeforeSaving({
+      profileId: input.profileId,
+      surface: input.surface ?? "",
+      rule: item.rule,
+      live: existing,
+    });
     await prisma.learning.create({
       data: {
         id: uniqueId("tl", input.profileId, String(learningCount + 1)),
         profileId: input.profileId,
         rule: item.rule,
-        status: "active",
+        ...ruleCheckFields(verdict, stamp),
         before: item.before,
         after: item.after,
         why: item.why,
@@ -313,7 +321,14 @@ export async function learnForProfile(input: {
         updatedAt: stamp,
       },
     });
-    learningCount += 1;
+    if (verdict.verdict === "conflict") {
+      // The newer rule wins; the old one is retired, not deleted, so Undo can bring it back.
+      await prisma.learning.update({
+        where: { id: verdict.ruleId },
+        data: { status: "retired", updatedAt: stamp },
+      });
+    }
+    if (verdict.verdict === "new" || verdict.verdict === "conflict") learningCount += 1;
   }
 
   let keptGold = false;
@@ -525,4 +540,118 @@ function uniqueId(...parts: string[]): string {
     .replace(/^-|-$/g, "")
     .slice(0, 48);
   return `${base}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * The rule check for one new rule, against the live rules that reach the same
+ * prompts (same surface, or no surface). Off in tests and when Voice's model
+ * calls are disabled, so the rule goes live as before.
+ */
+async function checkRuleBeforeSaving(input: {
+  profileId: string;
+  surface: string;
+  rule: string;
+  live: Array<{ id: string; rule: string; surface: string }>;
+}): Promise<RuleVerdict> {
+  if (!ruleCheckEnabled()) return { verdict: "new", reason: "" };
+  const profile = await prisma.profile.findUnique({ where: { id: input.profileId }, select: { guide: true } });
+  const live = input.live
+    .filter((row) => !row.surface || !input.surface || row.surface === input.surface)
+    .map((row) => ({ id: row.id, rule: row.rule }));
+  return decideNewRule(
+    { rule: input.rule, surface: input.surface, live, guide: profile?.guide ?? "" },
+    (prompt) => completeDraft(prompt),
+  );
+}
+
+/** Status and change fields for a rule the check sorted. A plain new rule gets neither. */
+export function ruleCheckFields(verdict: RuleVerdict, at: Date) {
+  if (verdict.verdict === "new") return { status: "active" as const };
+  const action = RULE_ACTION[verdict.verdict];
+  return {
+    status: action === "replaced" ? ("active" as const) : action,
+    autoAction: action,
+    autoReason: verdict.reason,
+    autoTargetId: "ruleId" in verdict ? verdict.ruleId : null,
+    autoAt: at,
+  };
+}
+
+const RULE_ACTION = { duplicate: "merged", claims: "blocked", conflict: "replaced" } as const;
+
+export type RuleChangeAction = (typeof RULE_ACTION)[keyof typeof RULE_ACTION];
+
+export type RuleChange = {
+  id: string;
+  rule: string;
+  surface: string;
+  action: RuleChangeAction;
+  reason: string;
+  /** The live rule it duplicated or replaced. */
+  target: { id: string; rule: string } | null;
+  before: string;
+  after: string;
+  why: string;
+  at: string;
+  undoneAt: string | null;
+};
+
+function isRuleChangeAction(value: string | null): value is RuleChangeAction {
+  return value === "merged" || value === "blocked" || value === "replaced";
+}
+
+/** What the rule check changed in the last `days` days, newest first. */
+export async function listRuleChanges(profileId: string, days = 7): Promise<RuleChange[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const rows = await prisma.learning.findMany({
+    where: { profileId, autoAt: { gte: since } },
+    orderBy: { autoAt: "desc" },
+  });
+  const targetIds = rows.map((row) => row.autoTargetId).filter((id): id is string => Boolean(id));
+  const targets = targetIds.length
+    ? await prisma.learning.findMany({ where: { id: { in: targetIds } }, select: { id: true, rule: true } })
+    : [];
+  const byId = new Map(targets.map((row) => [row.id, row]));
+  return rows.flatMap((row) =>
+    isRuleChangeAction(row.autoAction)
+      ? [
+          {
+            id: row.id,
+            rule: row.rule,
+            surface: row.surface,
+            action: row.autoAction,
+            reason: row.autoReason,
+            target: row.autoTargetId ? (byId.get(row.autoTargetId) ?? null) : null,
+            before: row.before,
+            after: row.after,
+            why: row.why,
+            at: iso(row.autoAt ?? row.createdAt),
+            undoneAt: row.undoneAt ? iso(row.undoneAt) : null,
+          },
+        ]
+      : [],
+  );
+}
+
+/**
+ * Undo one automatic change. A held rule (blocked or merged) goes live; a
+ * replacement is reversed, so the old rule is live again and the new one is
+ * dismissed. Undoing twice changes nothing.
+ */
+export async function undoRuleChange(id: string): Promise<RuleChangeAction> {
+  const row = await prisma.learning.findUnique({ where: { id } });
+  if (!row || !isRuleChangeAction(row.autoAction)) throw new Error(`Not an automatic change: ${id}`);
+  if (row.undoneAt) return row.autoAction;
+  const now = new Date();
+  if (row.autoAction === "replaced") {
+    await prisma.$transaction([
+      prisma.learning.update({ where: { id }, data: { status: "dismissed", undoneAt: now, updatedAt: now } }),
+      ...(row.autoTargetId
+        ? [prisma.learning.update({ where: { id: row.autoTargetId }, data: { status: "active", updatedAt: now } })]
+        : []),
+    ]);
+  } else {
+    await prisma.learning.update({ where: { id }, data: { status: "active", undoneAt: now, updatedAt: now } });
+  }
+  return row.autoAction;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { ChatComplete } from "./generate";
-import { buildRuleCheckPrompt, checkNewRule, claimsSections, parseRuleVerdict } from "./rule-check";
+import { buildRuleCheckPrompt, checkNewRule, claimsSections, decideNewRule, parseRuleVerdict } from "./rule-check";
 
 const GUIDE = `# Guide
 
@@ -64,5 +64,20 @@ describe("rule check", () => {
     const junk = vi.fn<ChatComplete>().mockResolvedValue("sure!");
     expect((await checkNewRule({ rule: "x", surface: "shop_faq", live, guide: GUIDE }, junk)).verdict).toBe("new");
     expect(junk.mock.calls[0]![0].effort).toBe("low");
+  });
+
+  it("acts only when both checks agree", async () => {
+    const input = { rule: "Use the brand name.", surface: "shop_faq", live, guide: GUIDE };
+    const agree = vi.fn<ChatComplete>().mockResolvedValue('{"verdict":"conflict","ruleId":"tl-1","reason":"Opposite."}');
+    expect(await decideNewRule(input, agree)).toMatchObject({ verdict: "conflict", ruleId: "tl-1" });
+    expect(agree).toHaveBeenCalledTimes(2);
+    const split = vi.fn<ChatComplete>()
+      .mockResolvedValueOnce('{"verdict":"duplicate","ruleId":"tl-2","reason":"Same."}')
+      .mockResolvedValueOnce('{"verdict":"new","reason":"Adds detail."}');
+    expect((await decideNewRule(input, split)).verdict).toBe("new");
+    const otherRule = vi.fn<ChatComplete>()
+      .mockResolvedValueOnce('{"verdict":"conflict","ruleId":"tl-1","reason":"x"}')
+      .mockResolvedValueOnce('{"verdict":"conflict","ruleId":"tl-2","reason":"y"}');
+    expect((await decideNewRule(input, otherRule)).verdict).toBe("new");
   });
 });

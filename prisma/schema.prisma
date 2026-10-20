@@ -16,6 +16,12 @@ enum GoldStatus {
 enum LearningStatus {
   active
   dismissed
+  /// Held back automatically: it loosened the claims policy.
+  blocked
+  /// Held back automatically: a live rule already said the same.
+  merged
+  /// Replaced automatically by a newer rule that contradicted it.
+  retired
 }
 
 enum LearningKind {
@@ -85,10 +91,19 @@ model Learning {
   classificationSource     ClassificationSource @default(fallback)
   classificationMismatch   Boolean  @default(false)
   sourceDraftId String?
+  /// What the rule check did with this rule: blocked, merged or replaced (it retired autoTargetId).
+  autoAction    String?
+  autoReason    String   @default("")
+  /// The live rule it duplicated or replaced.
+  autoTargetId  String?
+  autoAt        DateTime?
+  /// Set when someone undid the automatic change.
+  undoneAt      DateTime?
   createdAt     DateTime
   updatedAt     DateTime
 
   @@index([profileId, status, createdAt])
+  @@index([profileId, autoAt])
 }
 
 model GenerationLog {
