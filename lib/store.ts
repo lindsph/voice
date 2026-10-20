@@ -276,6 +276,7 @@ export async function learnForProfile(input: {
   architecture?: string;
   sourceDraftId?: string | null;
   kind?: "voice" | "fact" | "unknown";
+  evidence?: { before: string; after: string };
 }): Promise<{ learningCount: number; keptGold: boolean; learnings: Learning[] }> {
   const stamp = new Date();
   const inferred = await inferPreference({
@@ -309,8 +310,9 @@ export async function learnForProfile(input: {
         profileId: input.profileId,
         rule: item.rule,
         ...ruleCheckFields(verdict, stamp),
-        before: item.before,
-        after: item.after,
+        // A host-written rule has no edit of its own; keep the one it came from for review.
+        before: item.before || input.evidence?.before.trim() || "",
+        after: item.after || input.evidence?.after.trim() || "",
         why: item.why,
         surface: input.surface ?? "",
         kind: resolveLearningKind(input.kind, item.kind ?? "unknown"),

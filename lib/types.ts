@@ -167,4 +167,6 @@ export const learnInputSchema = z.object({
   architecture: z.string().optional().default(""),
   sourceDraftId: z.string().nullable().optional(),
   kind: z.enum(["voice", "fact", "unknown"]).optional(),
+  /** The edit a host-written rule came from. Stored for review only; inference never reads it. */
+  evidence: z.object({ before: z.string().default(""), after: z.string().default("") }).optional(),
 });

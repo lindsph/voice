@@ -72,6 +72,21 @@ describe("learnForProfile with the rule check", () => {
     expect(learning.update).not.toHaveBeenCalled();
   });
 
+  it("stores a host rule's evidence for review without passing it to inference", async () => {
+    decideNewRule.mockResolvedValue({ verdict: "new", reason: "" });
+    await learnForProfile({
+      profileId: "woolgrown",
+      surface: "shop_faq",
+      rule: "Use the brand name, not our.",
+      evidence: { before: "Our felt is organic.", after: "WoolGrown felt is organic." },
+    });
+    expect(learning.create.mock.calls[0]![0].data).toMatchObject({
+      rule: "Use the brand name, not our.",
+      before: "Our felt is organic.",
+      after: "WoolGrown felt is organic.",
+    });
+  });
+
   it("saves the rule live, as before, when the check is off", async () => {
     ruleCheckEnabled.mockReturnValue(false);
     await learnForProfile(teach);

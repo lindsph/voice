@@ -6,10 +6,11 @@ import type { Gold, Learning, Profile } from "@/lib/types";
 
 import ProfilePage from "./page";
 
-const { getProfile, listGolds, listLearnings, listGenerationLogs, countDraftsByGold, loadHealthReport } = vi.hoisted(() => ({
+const { getProfile, listGolds, listLearnings, listRuleChanges, listGenerationLogs, countDraftsByGold, loadHealthReport } = vi.hoisted(() => ({
   getProfile: vi.fn(),
   listGolds: vi.fn(),
   listLearnings: vi.fn(),
+  listRuleChanges: vi.fn(),
   listGenerationLogs: vi.fn(),
   countDraftsByGold: vi.fn(),
   loadHealthReport: vi.fn(),
@@ -30,7 +31,7 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-vi.mock("@/lib/store", () => ({ getProfile, listGolds, listLearnings }));
+vi.mock("@/lib/store", () => ({ getProfile, listGolds, listLearnings, listRuleChanges }));
 
 vi.mock("@/lib/generation-log", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/generation-log")>();
@@ -105,6 +106,7 @@ describe("Profile page", () => {
     getProfile.mockResolvedValue(profile);
     listGolds.mockResolvedValue([gold]);
     listLearnings.mockResolvedValue([learning]);
+    listRuleChanges.mockResolvedValue([]);
     listGenerationLogs.mockResolvedValue([]);
     countDraftsByGold.mockResolvedValue({ "gold-1": 3 });
     loadHealthReport.mockImplementation(async (_id: string, days: HealthDays) => buildHealthReport([], { days }));
@@ -149,6 +151,8 @@ describe("Profile page", () => {
     expect(loadHealthReport).toHaveBeenCalledWith("woolgrown", 30);
     expect(listGolds).toHaveBeenCalledWith("woolgrown");
     expect(listLearnings).toHaveBeenCalledWith("woolgrown");
+    expect(listRuleChanges).toHaveBeenCalledWith("woolgrown", 30);
+    expect(screen.getByRole("heading", { name: "Changed automatically" })).toBeTruthy();
     expect(listGenerationLogs).toHaveBeenCalledWith("woolgrown");
     expect(countDraftsByGold).toHaveBeenCalledWith("woolgrown");
     expect(screen.getByText("Voice guide")).toBeInTheDocument();
