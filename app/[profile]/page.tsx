@@ -6,7 +6,10 @@ import { ProfileScrollHeader } from "@/components/profile-scroll-header";
 import { RecentGenerations } from "@/components/recent-generations";
 import { countDraftsByGold, listGenerationLogs } from "@/lib/generation-log";
 import { healthDays, loadHealthReport } from "@/lib/health";
-import { getProfile, listGolds, listLearnings } from "@/lib/store";
+import { RuleChanges } from "@/components/rule-changes";
+import { getProfile, listGolds, listLearnings, listRuleChanges } from "@/lib/store";
+
+const RULE_CHANGE_DAYS = 30;
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +22,11 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   const { profile: id } = await params;
   const { days } = await searchParams;
   try {
-    const [profile, golds, learnings, logs, health, draftCounts] = await Promise.all([
+    const [profile, golds, learnings, ruleChanges, logs, health, draftCounts] = await Promise.all([
       getProfile(id),
       listGolds(id),
       listLearnings(id),
+      listRuleChanges(id, RULE_CHANGE_DAYS),
       listGenerationLogs(id),
       loadHealthReport(id, healthDays(days)),
       countDraftsByGold(id),
@@ -70,6 +74,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
                   </div>
                 </section>
                 <ProfileDesk profile={profile} golds={golds} learnings={learnings} draftCounts={draftCounts} />
+                <RuleChanges changes={ruleChanges} days={RULE_CHANGE_DAYS} />
                 <ProfileHealth profile={profile} report={health} />
                 <RecentGenerations profile={profile} logs={logs} />
               </div>
