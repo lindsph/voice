@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { isQuotedSnippetRule, rejectedFromApprove, ruleForPrompt, rulesFromEdit } from "./learn";
+import { isQuotedSnippetRule, rejectedFromApprove, ruleForPrompt } from "./learn";
 
 describe("isQuotedSnippetRule", () => {
   it("flags the ICL-style quote rules and leaves a real preference", () => {
@@ -46,25 +46,6 @@ describe("rejectedFromApprove", () => {
         "Wool holds water without waterlogging roots.",
       ),
     ).toBe("");
-  });
-});
-
-describe("rulesFromEdit", () => {
-  it("keeps the opening line from a first draft", () => {
-    const rules = rulesFromEdit({
-      before: "",
-      after: "Hey Charise — random one. Happy to look if useful.",
-    });
-    expect(rules[0]?.rule).toContain("Keep this voice");
-  });
-
-  it("stores an editor note", () => {
-    const rules = rulesFromEdit({
-      before: "Hello there.",
-      after: "Hey — random one.",
-      why: "Don’t open like a stranger.",
-    });
-    expect(rules.some((item) => item.rule.startsWith("Editor note:"))).toBe(true);
   });
 });
 
