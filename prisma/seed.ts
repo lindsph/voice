@@ -134,6 +134,12 @@ function woolgrownSurfaces() {
       maxWords: 120,
       hint: "A Meta ad's primary text, then a last line \"Headline: …\" under 40 characters. Open on the reader's problem, give one concrete benefit, end with one clear next step. Same claims rules as the blog.",
     },
+    {
+      id: "partner_email",
+      label: "Partner email",
+      maxWords: 220,
+      hint: "An email from Lindsey to a shop that stocks WoolGrown, or a site she is asking for a mention. Open on what helps them, then the ask. A short list is fine when they have to change specific things. No intro, no sales language, same claims rules as the blog.",
+    },
   ];
 }
 
