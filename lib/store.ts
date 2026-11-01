@@ -12,6 +12,7 @@ import { planGoldSetSync, type GoldSetItem } from "./gold-set";
 import { GUIDE_EXAMPLES_SOURCE, guideExampleParagraphs } from "./guide-examples";
 import { goldTitleFromPassage, herWritingSource } from "./her-writing";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
+import { leaveOutSource } from "./eval-source";
 import { decideNewRule, ruleCheckEnabled, type RuleVerdict } from "./rule-check";
 import type { DraftTrace, Gold, GoldUpdate, Learning, Profile, Surface } from "./types";
 
@@ -155,12 +156,15 @@ export async function getBundle(input: {
   seed?: string;
   facts?: string;
   architecture?: string;
+  /** Voice eval: leave out golds and rules taught from this piece (see eval-source). */
+  leaveOut?: string;
 }): Promise<{ profile: Profile; bundle: string; golds: Gold[]; learnings: Learning[] }> {
-  const [profile, golds, learnings] = await Promise.all([
+  const [profile, allGolds, allLearnings] = await Promise.all([
     getProfile(input.profileId),
     listGolds(input.profileId),
     listLearnings(input.profileId),
   ]);
+  const { golds, learnings } = leaveOutSource(allGolds, allLearnings, input.leaveOut);
   const surface = profile.surfaces.find((item) => item.id === input.surface);
   return {
     profile,
@@ -193,6 +197,10 @@ export async function generateForProfile(input: {
   style?: "plain" | "crafted";
   /** Host-sent tone guide. Wins over the stored copy, which is refreshed to match. */
   guide?: string;
+  /** Voice eval: leave out golds and rules taught from this piece. */
+  leaveOut?: string;
+  /** Voice eval runs pass false: a test draft is not a real generation to report on. */
+  log?: boolean;
 }): Promise<{
   body: string;
   retried: boolean;
@@ -208,6 +216,7 @@ export async function generateForProfile(input: {
     seed: input.seed,
     facts: input.facts,
     architecture: input.architecture,
+    leaveOut: input.leaveOut,
   });
   const model = input.model?.trim() || DRAFT_MODEL;
   const sentGuide = input.guide?.trim() ?? "";
@@ -247,6 +256,7 @@ export async function generateForProfile(input: {
       }),
   );
   let generationId: string | null = null;
+  if (input.log === false) return { ...result, generationId };
   try {
     generationId = await logGeneration(
       generationLogInput({

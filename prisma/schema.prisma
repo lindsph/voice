@@ -56,6 +56,8 @@ model Profile {
   golds          Gold[]
   learnings      Learning[]
   generationLogs GenerationLog[]
+  evalCases      EvalCase[]
+  evalRuns       EvalRun[]
 }
 
 model Gold {
@@ -135,4 +137,52 @@ model GenerationLog {
   userNote   String?
 
   @@index([profileId, createdAt])
+}
+
+/// One exam question for the voice eval: the brief Voice was given and what the
+/// person actually published. Integrators add one when a piece goes live.
+model EvalCase {
+  id           String   @id @default(cuid())
+  profileId    String
+  profile      Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  /// The integrator's own id for the piece (e.g. a blog topic id). Golds and
+  /// rules taught from this piece are left out while it is being tested.
+  sourceId     String
+  surfaceId    String
+  architecture String?
+  /// The brief, as Voice received it (from the GenerationLog when there is one).
+  facts        String
+  model        String?
+  style        String   @default("plain")
+  /// What the person published.
+  finalBody    String
+  generationId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([profileId, sourceId])
+  @@index([profileId, createdAt])
+}
+
+/// One run of the voice eval over a profile's cases, with its scorecard.
+model EvalRun {
+  id         String    @id @default(cuid())
+  profileId  String
+  profile    Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  /// running | done | failed
+  status     String    @default("running")
+  /// new-cases | monthly | manual | candidate
+  trigger    String
+  /// Candidate runs: what was changed (e.g. "her writing in the prompt").
+  label      String?
+  caseCount  Int       @default(0)
+  /// { passes, cases, keptPercent, tellsPerCase }
+  scoresJson String    @default("{}")
+  /// Per case: sourceId, passed, keptPercent, tells, and the judge's reasons.
+  casesJson  String    @default("[]")
+  error      String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([profileId, startedAt])
 }

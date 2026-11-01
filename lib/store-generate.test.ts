@@ -181,4 +181,36 @@ describe("generateForProfile logging", () => {
       }),
     });
   });
+  it("leaves out a piece's own golds and rules for the eval, and does not log the test draft", async () => {
+    const at = new Date("2026-10-01T00:00:00.000Z");
+    const gold = (id: string, title: string) => ({
+      id, profileId: "woolgrown", title, body: `${title} body text here.`, rejected: "", source: "x",
+      surface: "blog", architecture: "", canonical: false, status: "active", createdAt: at,
+    });
+    const rule = (id: string, sourceDraftId: string | null) => ({
+      id, profileId: "woolgrown", rule: `Rule ${id}`, status: "active", before: "", after: "", why: "",
+      surface: "blog", kind: "voice", classificationSource: "heuristic", classificationMismatch: false,
+      sourceDraftId, autoAction: null, autoReason: "", autoTargetId: null, autoAt: null, undoneAt: null,
+      createdAt: at, updatedAt: at,
+    });
+    golds.mockResolvedValue([
+      gold("g1", "urban-home-garden 10"),
+      gold("g2", "Kept in the editor · urban-home-garden"),
+      gold("g3", "what-is-woolgrown 2"),
+    ]);
+    learnings.mockResolvedValue([rule("r1", "urban-home-garden"), rule("r2", "wool-scraps-getting-a-second-life")]);
+    const result = await generateForProfile({
+      profileId: "woolgrown",
+      surface: "blog",
+      facts: "Urban gardens.",
+      seed: "urban-home-garden",
+      leaveOut: "urban-home-garden",
+      log: false,
+    });
+    const sent = generateDraft.mock.calls.at(-1)?.[0] as { golds: Array<{ id: string }>; learnings: Array<{ id: string }> };
+    expect(sent.golds.map((g) => g.id)).toEqual(["g3"]);
+    expect(sent.learnings.map((l) => l.id)).toEqual(["r2"]);
+    expect(logGeneration).not.toHaveBeenCalled();
+    expect(result.generationId).toBeNull();
+  });
 });
