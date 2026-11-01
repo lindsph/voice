@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   candidateBeat,
+  countedTellsPer1k,
+  medianDays,
   EVAL_MONTHLY_MS,
   evalDue,
   evalText,
@@ -12,7 +14,6 @@ import {
   scoresDropped,
   summarizeEval,
   tidy,
-  type EvalCaseScore,
 } from "./eval-score";
 
 const blog = JSON.stringify({
@@ -51,8 +52,8 @@ describe("keptPercent", () => {
 });
 
 describe("passedFromJudge / summarizeEval", () => {
-  const score = (passed: boolean, kept: number, tells: number, error?: string): EvalCaseScore => ({
-    sourceId: "x", passed, judgeCorrect: passed ? 1 : 2, keptPercent: kept, tells, judgeWhy: [], tellsBroken: [], error,
+  const draft = (passed: boolean, likeHer: number, kept: number, tells: number, counted = 0) => ({
+    passed, judgeCorrect: passed ? 1 : 2, likeHer, keptPercent: kept, tells, countedPer1k: counted, judgeWhy: [], tellsBroken: [], draft: "d",
   });
 
   it("passes only when the judge did not pick her piece in both orders", () => {
@@ -61,11 +62,38 @@ describe("passedFromJudge / summarizeEval", () => {
     expect(passedFromJudge(0)).toBe(true);
   });
 
-  it("averages scored cases and leaves out ones that errored", () => {
-    expect(summarizeEval([score(true, 60, 1), score(false, 40, 2), score(false, 0, 0, "boom")])).toEqual({
-      passes: 1, cases: 2, keptPercent: 50, tellsPerCase: 1.5,
+  it("averages over every draft, adds head-to-head and real results, and leaves out cases that errored", () => {
+    const out = summarizeEval(
+      [
+        { sourceId: "a", drafts: [draft(true, 6, 60, 1, 2), draft(false, 4, 40, 2, 4)], herCountedPer1k: 1, headToHead: { wins: 2, ties: 0, losses: 0 } },
+        { sourceId: "b", drafts: [draft(false, 5, 50, 0, 0)], herCountedPer1k: 3, headToHead: { wins: 0, ties: 1, losses: 0 } },
+        { sourceId: "c", drafts: [], herCountedPer1k: 0, error: "boom" },
+      ],
+      { cases: 1, keptPercent: 62, medianDaysToLive: 3.5 },
+    );
+    expect(out).toEqual({
+      passes: 1, cases: 2, drafts: 3, likeHer: 5, keptPercent: 50, tellsPerCase: 1, countedPer1k: 2, herCountedPer1k: 2,
+      headToHead: { wins: 2, ties: 1, losses: 0 },
+      real: { cases: 1, keptPercent: 62, medianDaysToLive: 3.5 },
     });
-    expect(summarizeEval([])).toEqual({ passes: 0, cases: 0, keptPercent: 0, tellsPerCase: 0 });
+  });
+
+  it("scores nothing as zeros", () => {
+    expect(summarizeEval([])).toMatchObject({ passes: 0, cases: 0, drafts: 0, keptPercent: 0 });
+  });
+});
+
+describe("countedTellsPer1k / medianDays", () => {
+  it("counts em-dashes, it's-not-X-it's-Y and lists of three per 1,000 words", () => {
+    expect(countedTellsPer1k("")).toBe(0);
+    expect(countedTellsPer1k("Plain words only here, nothing else at all.")).toBe(0);
+    expect(countedTellsPer1k("Wool works — really. It's not mulch, it's food.")).toBeGreaterThan(0);
+  });
+
+  it("takes the middle of the spans", () => {
+    expect(medianDays([])).toBeNull();
+    expect(medianDays([5, 1, 3])).toBe(3);
+    expect(medianDays([1, 2, 3, 4])).toBe(2.5);
   });
 });
 
@@ -92,6 +120,19 @@ describe("evalDue", () => {
 
 describe("scoresDropped / candidateBeat", () => {
   const base = { passes: 3, cases: 7, keptPercent: 55, tellsPerCase: 1 };
+
+  it("compares pass rates over drafts, and flags half a point less on sounds-like-her", () => {
+    const now = { ...base, passes: 3, drafts: 21, likeHer: 5 };
+    expect(scoresDropped(now, { ...now, likeHer: 4.5 })).toBe(true);
+    expect(scoresDropped(now, { ...now, likeHer: 4.8 })).toBe(false);
+    expect(scoresDropped(now, { ...now, passes: 2 })).toBe(true);
+  });
+
+  it("calls a candidate better on head-to-head wins, kept within 2 points", () => {
+    expect(candidateBeat(base, { ...base, keptPercent: 54, headToHead: { wins: 5, ties: 10, losses: 3 } })).toBe(true);
+    expect(candidateBeat(base, { ...base, headToHead: { wins: 3, ties: 10, losses: 3 } })).toBe(false);
+    expect(candidateBeat(base, { ...base, keptPercent: 50, headToHead: { wins: 9, ties: 0, losses: 0 } })).toBe(false);
+  });
 
   it("flags fewer passes, 5+ points less kept, or half a tell more", () => {
     expect(scoresDropped(base, { ...base, passes: 2 })).toBe(true);

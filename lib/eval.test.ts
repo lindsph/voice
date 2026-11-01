@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
-  generationLog: { findFirst: vi.fn() },
+  generationLog: { findFirst: vi.fn(), findMany: vi.fn() },
   evalCase: { upsert: vi.fn(), findMany: vi.fn(), count: vi.fn() },
   evalRun: { create: vi.fn(), update: vi.fn(), findMany: vi.fn() },
 }));
@@ -77,11 +77,21 @@ describe("evalStatus", () => {
 
 describe("runEval", () => {
   const cases = [
-    { sourceId: "urban", surfaceId: "blog", facts: "Urban brief", architecture: "how-to-steps", model: "claude-opus-4-6", style: "plain", finalBody: "If you're gardening in the city, wool can help you succeed!" },
-    { sourceId: "broken", surfaceId: "blog", facts: "Brief", architecture: null, model: null, style: "plain", finalBody: "Hers." },
+    { sourceId: "urban", surfaceId: "blog", facts: "Urban brief", architecture: "how-to-steps", model: "claude-opus-4-6", style: "plain", finalBody: "If you're gardening in the city, wool can help you succeed!", generationId: "gen-1", createdAt: new Date("2026-09-04T00:00:00.000Z") },
+    { sourceId: "broken", surfaceId: "blog", facts: "Brief", architecture: null, model: null, style: "plain", finalBody: "Hers.", generationId: null, createdAt: new Date("2026-09-05T00:00:00.000Z") },
   ];
 
-  it("writes each case with its own piece left out, scores it, and saves the scorecard", async () => {
+  /** Judge replies per draft: two blind picks, a 1–10 score, the tells check. */
+  function judge(score: number) {
+    return vi.fn(async (input: { system: string; user: string }) => {
+      if (input.system.includes("rate how much")) return `{"score": ${score}, "why": "plain"}`;
+      if (input.system.includes("standing rules")) return '{"broken":[1]}';
+      if (input.system.includes("compare two drafts")) return '{"pick":"A"}';
+      return '{"pick":"unsure"}';
+    });
+  }
+
+  it("writes several drafts per case with its own piece left out, scores each, and adds real results", async () => {
     store.getProfile.mockResolvedValue({ name: "WoolGrown" });
     store.listLearnings.mockResolvedValue([
       { rule: "No recap lines.", surface: "blog", sourceDraftId: null },
@@ -89,41 +99,54 @@ describe("runEval", () => {
       { rule: "FAQ rule.", surface: "shop_faq", sourceDraftId: null },
     ]);
     db.evalCase.findMany.mockResolvedValue(cases);
+    db.generationLog.findMany = vi.fn().mockResolvedValue([
+      { id: "gen-1", generatedBody: "If you're gardening in the city, wool helps.", createdAt: new Date("2026-09-01T00:00:00.000Z") },
+    ]);
     store.generateForProfile.mockImplementation(async (input: { leaveOut: string }) => {
       if (input.leaveOut === "broken") throw new Error("model down");
-      return { body: JSON.stringify({ lead: "Wool can help city gardens.", sections: [], cta: "Try it." }) };
+      return { body: JSON.stringify({ lead: "Wool can help city gardens — really.", sections: [], cta: "Try it." }) };
     });
-    const complete = vi
-      .fn()
-      .mockResolvedValueOnce('{"pick":"A","why":"real first"}') // real piece first, judge right
-      .mockResolvedValueOnce('{"pick":"A","why":"fooled"}') // draft first, judge picked the draft
-      .mockResolvedValueOnce('{"broken":[1]}');
-    await runEval("run-1", { profileId: "woolgrown", trigger: "manual", complete });
+    const complete = judge(6);
+    await runEval("run-1", { profileId: "woolgrown", trigger: "manual", drafts: 3, complete });
 
+    expect(store.generateForProfile).toHaveBeenCalledTimes(3 + 3);
     expect(store.generateForProfile).toHaveBeenCalledWith(
       expect.objectContaining({ leaveOut: "urban", log: false, seed: "urban", format: "blog", model: "claude-opus-4-6" }),
     );
-    const tellsPrompt = complete.mock.calls[2]![0].user as string;
-    expect(tellsPrompt).toContain("1. No recap lines.");
-    expect(tellsPrompt).not.toContain("Rule from urban itself.");
-    expect(tellsPrompt).not.toContain("FAQ rule.");
+    const tellsPrompt = complete.mock.calls.find((c) => c[0].system.includes("standing rules"))![0];
+    expect(tellsPrompt.user).toContain("1. No recap lines.");
+    expect(tellsPrompt.user).not.toContain("Rule from urban itself.");
+    expect(tellsPrompt.user).not.toContain("FAQ rule.");
 
     const saved = db.evalRun.update.mock.calls.at(-1)![0].data;
     expect(saved.status).toBe("done");
-    expect(JSON.parse(saved.scoresJson)).toEqual({ passes: 1, cases: 1, keptPercent: expect.any(Number), tellsPerCase: 1 });
+    const scores = JSON.parse(saved.scoresJson);
+    expect(scores).toMatchObject({ passes: 3, cases: 1, drafts: 3, likeHer: 6, tellsPerCase: 1, real: { cases: 1, medianDaysToLive: 3 } });
+    expect(scores.countedPer1k).toBeGreaterThan(0);
+    expect(scores.headToHead).toBeUndefined();
     const perCase = JSON.parse(saved.casesJson);
-    expect(perCase[0]).toMatchObject({ sourceId: "urban", passed: true, judgeCorrect: 1, tellsBroken: ["No recap lines."] });
-    expect(perCase[1]).toMatchObject({ sourceId: "broken", error: "model down" });
+    expect(perCase[0].drafts).toHaveLength(3);
+    expect(perCase[0].drafts[0]).toMatchObject({ passed: true, likeHer: 6, tellsBroken: ["No recap lines."] });
+    expect(perCase[0].drafts[0].draft).toContain("Wool can help city gardens");
+    expect(perCase[1]).toMatchObject({ sourceId: "broken", error: "model down", drafts: [] });
   });
 
-  it("lets a candidate run try another draft model", async () => {
+  it("compares a candidate's drafts head-to-head with the last baseline run, and may try another model", async () => {
     store.getProfile.mockResolvedValue({ name: "WoolGrown" });
     store.listLearnings.mockResolvedValue([]);
     db.evalCase.findMany.mockResolvedValue([cases[0]]);
-    store.generateForProfile.mockResolvedValue({ body: "Draft." });
-    const complete = vi.fn().mockResolvedValue('{"pick":"unsure"}');
-    await runEval("run-2", { profileId: "woolgrown", trigger: "candidate", model: "claude-opus-5-5", complete });
+    db.generationLog.findMany = vi.fn().mockResolvedValue([]);
+    db.evalRun.findMany.mockResolvedValue([
+      { casesJson: JSON.stringify([{ sourceId: "urban", drafts: [{ draft: "Old draft one." }, { draft: "Old draft two." }] }]) },
+    ]);
+    store.generateForProfile.mockResolvedValue({ body: "New draft." });
+    const complete = judge(5);
+    await runEval("run-2", { profileId: "woolgrown", trigger: "candidate", model: "claude-opus-5-5", drafts: 2, complete });
     expect(store.generateForProfile).toHaveBeenCalledWith(expect.objectContaining({ model: "claude-opus-5-5" }));
+    expect(db.evalRun.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ status: "done", NOT: { trigger: "candidate" } }) }));
+    const scores = JSON.parse(db.evalRun.update.mock.calls.at(-1)![0].data.scoresJson);
+    // The judge always picks "A": one win and one loss per pair, so both pairs tie.
+    expect(scores.headToHead).toEqual({ wins: 0, ties: 2, losses: 0 });
   });
 
   it("saves the run as failed instead of throwing when it cannot start", async () => {

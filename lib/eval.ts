@@ -9,17 +9,24 @@
 import { prisma } from "./db";
 import {
   candidateBeat,
+  countedTellsPer1k,
+  EVAL_DRAFT_KEEP_CHARS,
+  EVAL_DRAFTS_PER_CASE,
   EVAL_STALE_RUN_MS,
   evalDue,
   evalText,
   firstJsonObject,
   firstWords,
   keptPercent,
+  medianDays,
   passedFromJudge,
   scoresDropped,
   summarizeEval,
   type EvalCaseScore,
+  type EvalDraftScore,
   type EvalScores,
+  type HeadToHead,
+  type RealResults,
 } from "./eval-score";
 import { leaveOutSource } from "./eval-source";
 import { completeDraft, DRAFT_MODEL } from "./generate";
@@ -185,6 +192,8 @@ export type EvalRunOptions = {
   label?: string;
   /** Candidate runs may try another draft model. */
   model?: string;
+  /** Drafts per case (default EVAL_DRAFTS_PER_CASE). */
+  drafts?: number;
   complete?: Complete;
   generate?: Generate;
 };
@@ -208,6 +217,25 @@ function judgeSystem(name: string): string {
   ].join("\n");
 }
 
+function likeHerSystem(name: string): string {
+  return [
+    `You rate how much a draft sounds like ${name}.`,
+    `You get a piece ${name} published (the reference) and a draft on the same subject.`,
+    "Rate 1–10 how much the draft sounds like the same writer: word choice, rhythm, warmth, punctuation, how people are introduced, what is left out. Ignore facts and length.",
+    "10 = you could not tell them apart. 5 = same subject, clearly a different writer. 1 = nothing like her.",
+    'Return only JSON: {"score": 1-10, "why": "one short sentence"}.',
+  ].join("\n");
+}
+
+function headToHeadSystem(name: string): string {
+  return [
+    `You compare two drafts against ${name}'s writing.`,
+    `You get a piece ${name} published (the reference) and two drafts, A and B, on the same subject.`,
+    "Which draft sounds more like the writer of the reference? Judge voice only, not facts or length.",
+    'Return only JSON: {"pick": "A" | "B" | "tie"}.',
+  ].join("\n");
+}
+
 function tellsSystem(): string {
   return [
     "You check a draft against a writer's standing rules.",
@@ -216,14 +244,13 @@ function tellsSystem(): string {
   ].join("\n");
 }
 
-async function scoreCase(input: {
+async function scoreDraft(input: {
   name: string;
-  sourceId: string;
   draft: string;
   published: string;
   rules: string[];
   complete: Complete;
-}): Promise<EvalCaseScore> {
+}): Promise<EvalDraftScore> {
   const draft = firstWords(input.draft);
   const published = firstWords(input.published);
   let correct = 0;
@@ -237,6 +264,14 @@ async function scoreCase(input: {
     if ((realFirst && pick === "A") || (!realFirst && pick === "B")) correct += 1;
     if (reply.why) judgeWhy.push(String(reply.why));
   }
+  const rated = firstJsonObject(
+    await input.complete({
+      system: likeHerSystem(input.name),
+      user: `=== Reference ===\n${published}\n\n=== Draft ===\n${draft}`,
+    }),
+  ) as { score?: unknown; why?: string };
+  const likeHer = Math.min(10, Math.max(1, Math.round(Number(rated.score) || 1)));
+  if (rated.why) judgeWhy.push(String(rated.why));
   let tellsBroken: string[] = [];
   if (input.rules.length > 0) {
     const reply = firstJsonObject(
@@ -251,73 +286,168 @@ async function scoreCase(input: {
       .filter((rule): rule is string => Boolean(rule));
   }
   return {
-    sourceId: input.sourceId,
     passed: passedFromJudge(correct),
     judgeCorrect: correct,
+    likeHer,
     keptPercent: keptPercent(input.draft, input.published),
     tells: tellsBroken.length,
+    countedPer1k: countedTellsPer1k(input.draft),
     judgeWhy,
     tellsBroken,
+    draft: input.draft.slice(0, EVAL_DRAFT_KEEP_CHARS),
   };
+}
+
+/** Candidate draft i against baseline draft i, both orders; a split decision counts as a tie. */
+async function headToHead(input: {
+  name: string;
+  published: string;
+  candidate: string[];
+  baseline: string[];
+  complete: Complete;
+}): Promise<HeadToHead> {
+  const tally: HeadToHead = { wins: 0, ties: 0, losses: 0 };
+  const reference = firstWords(input.published);
+  const pairs = Math.min(input.candidate.length, input.baseline.length);
+  for (let i = 0; i < pairs; i++) {
+    const cand = firstWords(input.candidate[i]!);
+    const base = firstWords(input.baseline[i]!);
+    let points = 0;
+    for (const candFirst of [true, false]) {
+      const [a, b] = candFirst ? [cand, base] : [base, cand];
+      const reply = firstJsonObject(
+        await input.complete({
+          system: headToHeadSystem(input.name),
+          user: `=== Reference ===\n${reference}\n\n=== A ===\n${a}\n\n=== B ===\n${b}`,
+        }),
+      ) as { pick?: string };
+      const pick = String(reply.pick ?? "").trim().toUpperCase();
+      if (pick === (candFirst ? "A" : "B")) points += 1;
+      else if (pick === (candFirst ? "B" : "A")) points -= 1;
+    }
+    if (points > 0) tally.wins += 1;
+    else if (points < 0) tally.losses += 1;
+    else tally.ties += 1;
+  }
+  return tally;
+}
+
+/** What she did with real drafts: cases whose brief came from a logged generation. */
+async function realResults(
+  cases: Array<{ generationId: string | null; finalBody: string; createdAt: Date }>,
+): Promise<RealResults | undefined> {
+  const logged = cases.filter((c) => c.generationId);
+  if (logged.length === 0) return undefined;
+  const logs = await prisma.generationLog.findMany({
+    where: { id: { in: logged.map((c) => c.generationId!) } },
+    select: { id: true, generatedBody: true, createdAt: true },
+  });
+  const byId = new Map(logs.map((l) => [l.id, l]));
+  const kept: number[] = [];
+  const days: number[] = [];
+  for (const c of logged) {
+    const log = byId.get(c.generationId!);
+    if (!log) continue;
+    kept.push(keptPercent(evalText(log.generatedBody), evalText(c.finalBody)));
+    days.push((c.createdAt.getTime() - log.createdAt.getTime()) / (24 * 60 * 60 * 1000));
+  }
+  if (kept.length === 0) return undefined;
+  return {
+    cases: kept.length,
+    keptPercent: Math.round(kept.reduce((a, b) => a + b, 0) / kept.length),
+    medianDaysToLive: medianDays(days),
+  };
+}
+
+/** The newest finished scheduled run's saved drafts, per case, for head-to-head. */
+async function baselineDrafts(profileId: string): Promise<Map<string, string[]>> {
+  const runs = await prisma.evalRun.findMany({
+    where: { profileId, status: "done", NOT: { trigger: "candidate" } },
+    orderBy: { startedAt: "desc" },
+    take: 1,
+    select: { casesJson: true },
+  });
+  const out = new Map<string, string[]>();
+  try {
+    for (const c of JSON.parse(runs[0]?.casesJson ?? "[]") as Array<Partial<EvalCaseScore>>) {
+      const drafts = (c.drafts ?? []).map((d) => d.draft).filter((d): d is string => Boolean(d));
+      if (c.sourceId && drafts.length) out.set(c.sourceId, drafts);
+    }
+  } catch {
+    // An old run without saved drafts: no head-to-head.
+  }
+  return out;
 }
 
 /** Runs every case and saves the scorecard. Never throws: a failure is saved on the run. */
 export async function runEval(runId: string, options: EvalRunOptions): Promise<void> {
   const complete = options.complete ?? judgeComplete;
   const generate = options.generate ?? generateForProfile;
+  const draftsPerCase = Math.max(1, options.drafts ?? (Number(process.env.VOICE_EVAL_DRAFTS) || EVAL_DRAFTS_PER_CASE));
   try {
     const [profile, cases, learnings] = await Promise.all([
       getProfile(options.profileId),
       prisma.evalCase.findMany({ where: { profileId: options.profileId }, orderBy: { createdAt: "asc" } }),
       listLearnings(options.profileId),
     ]);
+    const baseline = options.trigger === "candidate" ? await baselineDrafts(options.profileId) : new Map<string, string[]>();
     await prisma.evalRun.update({ where: { id: runId }, data: { caseCount: cases.length } });
     const scored: EvalCaseScore[] = [];
     for (const item of cases) {
+      const published = evalText(item.finalBody);
       try {
-        const result = await generate({
-          profileId: options.profileId,
-          surface: item.surfaceId,
-          facts: item.facts,
-          seed: item.sourceId,
-          architecture: item.architecture ?? undefined,
-          format: item.surfaceId === "blog" ? "blog" : "plain",
-          model: options.model ?? item.model ?? undefined,
-          style: item.style === "crafted" ? "crafted" : "plain",
-          leaveOut: item.sourceId,
-          log: false,
-        });
         const rules = leaveOutSource([], learnings, item.sourceId)
           .learnings.filter((l) => !l.surface || l.surface === item.surfaceId)
           .map((l) => l.rule);
-        scored.push(
-          await scoreCase({
-            name: profile.name,
-            sourceId: item.sourceId,
-            draft: evalText(result.body),
-            published: evalText(item.finalBody),
-            rules,
-            complete,
+        const drafts = await Promise.all(
+          Array.from({ length: draftsPerCase }, async () => {
+            const result = await generate({
+              profileId: options.profileId,
+              surface: item.surfaceId,
+              facts: item.facts,
+              seed: item.sourceId,
+              architecture: item.architecture ?? undefined,
+              format: item.surfaceId === "blog" ? "blog" : "plain",
+              model: options.model ?? item.model ?? undefined,
+              style: item.style === "crafted" ? "crafted" : "plain",
+              leaveOut: item.sourceId,
+              log: false,
+            });
+            return scoreDraft({ name: profile.name, draft: evalText(result.body), published, rules, complete });
           }),
         );
+        const baseDrafts = baseline.get(item.sourceId);
+        scored.push({
+          sourceId: item.sourceId,
+          drafts,
+          herCountedPer1k: countedTellsPer1k(published),
+          ...(baseDrafts
+            ? {
+                headToHead: await headToHead({
+                  name: profile.name,
+                  published,
+                  candidate: drafts.map((d) => d.draft),
+                  baseline: baseDrafts,
+                  complete,
+                }),
+              }
+            : {}),
+        });
       } catch (err) {
         scored.push({
           sourceId: item.sourceId,
-          passed: false,
-          judgeCorrect: 0,
-          keptPercent: 0,
-          tells: 0,
-          judgeWhy: [],
-          tellsBroken: [],
+          drafts: [],
+          herCountedPer1k: countedTellsPer1k(published),
           error: err instanceof Error ? err.message.slice(0, 240) : String(err),
         });
       }
     }
+    const real = await realResults(cases);
     await prisma.evalRun.update({
       where: { id: runId },
       data: {
         status: "done",
-        scoresJson: JSON.stringify(summarizeEval(scored)),
+        scoresJson: JSON.stringify(summarizeEval(scored, real)),
         casesJson: JSON.stringify(scored),
         finishedAt: new Date(),
       },

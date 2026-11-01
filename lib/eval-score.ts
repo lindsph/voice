@@ -9,6 +9,7 @@
  */
 
 import { parseBlogJson } from "./blog-shape";
+import { countAntitheses, countEmDashes, findTricolons } from "./slop";
 
 /** Both texts are cut to the same length so length never gives the draft away. */
 export const EVAL_MAX_WORDS = 380;
@@ -18,24 +19,56 @@ export const EVAL_NEW_CASES_DUE = 3;
 export const EVAL_MONTHLY_MS = 30 * 24 * 60 * 60 * 1000;
 /** A run still "running" after this long is treated as dead. */
 export const EVAL_STALE_RUN_MS = 2 * 60 * 60 * 1000;
+/** Drafts written per case in a run, so one lucky or unlucky draft doesn't move the score. */
+export const EVAL_DRAFTS_PER_CASE = 3;
+/** Characters of each draft kept on the run, for head-to-head comparisons later. */
+export const EVAL_DRAFT_KEEP_CHARS = 4000;
 
-export type EvalCaseScore = {
-  sourceId: string;
+/** One draft of one case. */
+export type EvalDraftScore = {
   passed: boolean;
   /** 0, 1 or 2: how many orders the judge picked her real piece. */
   judgeCorrect: number;
+  /** 1–10: how much the draft sounds like the writer of her real piece. */
+  likeHer: number;
   keptPercent: number;
   tells: number;
+  /** Em-dashes, "it's not X, it's Y" and lists of three, per 1,000 words. */
+  countedPer1k: number;
   judgeWhy: string[];
   tellsBroken: string[];
+  /** Saved for head-to-head against a later candidate run. */
+  draft: string;
+};
+
+export type EvalCaseScore = {
+  sourceId: string;
+  drafts: EvalDraftScore[];
+  /** The same counted tells in her real piece, for comparison. */
+  herCountedPer1k: number;
+  /** Candidate runs: this case against the baseline run's drafts. */
+  headToHead?: HeadToHead;
   error?: string;
 };
 
+export type HeadToHead = { wins: number; ties: number; losses: number };
+
+/** What the person did with real (not test) drafts: from Voice's own log, cases that have one. */
+export type RealResults = { cases: number; keptPercent: number; medianDaysToLive: number | null };
+
 export type EvalScores = {
+  /** Drafts that passed as hers, out of `drafts`. */
   passes: number;
+  /** Cases scored. */
   cases: number;
+  drafts?: number;
+  likeHer?: number;
   keptPercent: number;
   tellsPerCase: number;
+  countedPer1k?: number;
+  herCountedPer1k?: number;
+  headToHead?: HeadToHead;
+  real?: RealResults;
 };
 
 /** Readable prose from a blog JSON draft (lead, section heads and bodies, close); other bodies as is. */
@@ -107,17 +140,54 @@ export function passedFromJudge(correct: number): boolean {
   return correct < 2;
 }
 
-export function summarizeEval(cases: EvalCaseScore[]): EvalScores {
-  const scored = cases.filter((c) => !c.error);
-  const n = scored.length;
-  const avg = (pick: (c: EvalCaseScore) => number) =>
-    n === 0 ? 0 : Math.round((scored.reduce((sum, c) => sum + pick(c), 0) / n) * 10) / 10;
+/** Em-dashes, "it's not X, it's Y" and lists of three, per 1,000 words. */
+export function countedTellsPer1k(text: string): number {
+  const words = text.split(/\s+/).filter(Boolean).length;
+  if (words === 0) return 0;
+  const count = countEmDashes(text) + countAntitheses(text) + findTricolons(text).length;
+  return Math.round((count / words) * 1000 * 10) / 10;
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+function mean(values: number[]): number {
+  return values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+export function summarizeEval(cases: EvalCaseScore[], real?: RealResults): EvalScores {
+  const scored = cases.filter((c) => !c.error && c.drafts.length > 0);
+  const drafts = scored.flatMap((c) => c.drafts);
+  const h2h = scored.filter((c) => c.headToHead).map((c) => c.headToHead!);
   return {
-    passes: scored.filter((c) => c.passed).length,
-    cases: n,
-    keptPercent: Math.round(avg((c) => c.keptPercent)),
-    tellsPerCase: avg((c) => c.tells),
+    passes: drafts.filter((d) => d.passed).length,
+    cases: scored.length,
+    drafts: drafts.length,
+    likeHer: round1(mean(drafts.map((d) => d.likeHer))),
+    keptPercent: Math.round(mean(drafts.map((d) => d.keptPercent))),
+    tellsPerCase: round1(mean(drafts.map((d) => d.tells))),
+    countedPer1k: round1(mean(drafts.map((d) => d.countedPer1k))),
+    herCountedPer1k: round1(mean(scored.map((c) => c.herCountedPer1k))),
+    ...(h2h.length > 0
+      ? {
+          headToHead: {
+            wins: h2h.reduce((a, h) => a + h.wins, 0),
+            ties: h2h.reduce((a, h) => a + h.ties, 0),
+            losses: h2h.reduce((a, h) => a + h.losses, 0),
+          },
+        }
+      : {}),
+    ...(real ? { real } : {}),
   };
+}
+
+/** Median of days between each real draft and the piece going live. */
+export function medianDays(spans: number[]): number | null {
+  if (spans.length === 0) return null;
+  const sorted = [...spans].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return round1(sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2);
 }
 
 export type EvalTrigger = "new-cases" | "monthly";
@@ -136,24 +206,40 @@ export function evalDue(input: {
   return null;
 }
 
-/** A later scheduled run scored worse: fewer passes, 5+ points less kept, or half a tell more per piece. */
+/** Drafts that passed, as a share of drafts (older runs scored one draft per case). */
+export function passRate(s: EvalScores): number {
+  const n = s.drafts ?? s.cases;
+  return n === 0 ? 0 : s.passes / n;
+}
+
+/**
+ * A later scheduled run scored worse: a lower pass rate, half a point less on
+ * sounds-like-her, 5+ points less kept, or half a tell more per draft.
+ */
 export function scoresDropped(previous: EvalScores, next: EvalScores): boolean {
   if (previous.cases === 0 || next.cases === 0) return false;
-  const passRate = (s: EvalScores) => s.passes / s.cases;
+  const likeHerDrop =
+    previous.likeHer !== undefined && next.likeHer !== undefined && next.likeHer <= previous.likeHer - 0.5;
   return (
     passRate(next) < passRate(previous) ||
+    likeHerDrop ||
     next.keptPercent <= previous.keptPercent - 5 ||
     next.tellsPerCase >= previous.tellsPerCase + 0.5
   );
 }
 
-/** A candidate beat the baseline: more passes, and kept no lower. */
+/**
+ * A candidate beat the baseline. With head-to-head: it won more comparisons than
+ * it lost, and kept at most 2 points less. Without (older runs): a higher pass
+ * rate and kept no lower.
+ */
 export function candidateBeat(baseline: EvalScores, candidate: EvalScores): boolean {
   if (baseline.cases === 0 || candidate.cases === 0) return false;
-  return (
-    candidate.passes / candidate.cases > baseline.passes / baseline.cases &&
-    candidate.keptPercent >= baseline.keptPercent
-  );
+  if (candidate.headToHead) {
+    const { wins, losses } = candidate.headToHead;
+    return wins > losses && candidate.keptPercent >= baseline.keptPercent - 2;
+  }
+  return passRate(candidate) > passRate(baseline) && candidate.keptPercent >= baseline.keptPercent;
 }
 
 /** The first balanced {...} in a model reply. */
