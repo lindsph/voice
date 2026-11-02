@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import { formatToneBundle } from "./bundle";
+import type { DraftVariant } from "./cleanup";
 import { generationLogInput, logGeneration } from "./generation-log";
 import { completeDraft, craftedApplies, CRAFTED_EFFORT, DRAFT_MODEL, generateDraft } from "./generate";
 import { inferPreference } from "./infer";
@@ -201,6 +202,8 @@ export async function generateForProfile(input: {
   leaveOut?: string;
   /** Voice eval runs pass false: a test draft is not a real generation to report on. */
   log?: boolean;
+  /** Voice eval candidate runs: a tested change to drafting. */
+  variant?: DraftVariant;
 }): Promise<{
   body: string;
   retried: boolean;
@@ -247,6 +250,7 @@ export async function generateForProfile(input: {
       task: input.task,
       model,
       style: input.style,
+      variant: input.variant,
     },
     (prompt) =>
       completeDraft({

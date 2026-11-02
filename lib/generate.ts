@@ -1,4 +1,5 @@
 import { BLOG_SHAPE_INSTRUCTION, blogDraftIssues, blogProse, blogReaderText } from "./blog-shape";
+import { cleanupDraft, type DraftVariant } from "./cleanup";
 import { collectToneSelection, formatToneBundle, type ToneBundleInput } from "./bundle";
 import {
   buildAnglePrompt,
@@ -325,13 +326,15 @@ export async function generateDraft(
     task?: ShopifyTask;
     model?: string;
     style?: DraftStyle;
+    /** A tested change to drafting; see cleanup.ts. */
+    variant?: DraftVariant;
   },
   complete: ChatComplete,
 ): Promise<{ body: string; bundle: string; retried: boolean; warnings: string[]; trace: DraftTrace }> {
   const angle = craftedApplies(request) ? await planAngle(request, complete) : undefined;
   const input = angle ? { ...request, angle } : request;
   const user = buildUserPrompt(input);
-  const first = unwrapDraft(await complete({ system: input.profile.systemPrompt, user }));
+  const first = await cleanedUp(input, unwrapDraft(await complete({ system: input.profile.systemPrompt, user })), complete);
   const hits = draftHits(first, input);
   if (hits.length === 0) {
     return {
@@ -342,14 +345,18 @@ export async function generateDraft(
       trace: draftTrace(input, null),
     };
   }
-  const second = unwrapDraft(
-    await complete({
-      system: input.profile.systemPrompt,
-      user: buildUserPrompt({
-        ...input,
-        retryContext: hits.map((item) => `- ${item}`).join("\n"),
+  const second = await cleanedUp(
+    input,
+    unwrapDraft(
+      await complete({
+        system: input.profile.systemPrompt,
+        user: buildUserPrompt({
+          ...input,
+          retryContext: hits.map((item) => `- ${item}`).join("\n"),
+        }),
       }),
-    }),
+    ),
+    complete,
   );
   const body = second || first;
   return {
@@ -359,6 +366,16 @@ export async function generateDraft(
     warnings: draftHits(body, input),
     trace: draftTrace(input, hits),
   };
+}
+
+/** The clean-up variant edits whole pieces only; one-line fields and passage edits stay as drafted. */
+async function cleanedUp(
+  input: { profile: Profile; surfaceId: string; format?: "blog" | "plain"; task?: ShopifyTask; variant?: DraftVariant },
+  body: string,
+  complete: ChatComplete,
+): Promise<string> {
+  if (input.variant !== "cleanup" || input.task || input.format === "plain" || !body) return body;
+  return cleanupDraft({ name: input.profile.name, body, blog: isBlogShape(input) }, complete);
 }
 
 /**

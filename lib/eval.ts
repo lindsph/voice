@@ -28,6 +28,7 @@ import {
   type HeadToHead,
   type RealResults,
 } from "./eval-score";
+import type { DraftVariant } from "./cleanup";
 import { leaveOutSource } from "./eval-source";
 import { completeDraft, DRAFT_MODEL } from "./generate";
 import { generateForProfile, getProfile, listLearnings } from "./store";
@@ -190,8 +191,10 @@ export type EvalRunOptions = {
   profileId: string;
   trigger: string;
   label?: string;
-  /** Candidate runs may try another draft model. */
+  /** Candidate runs may try another draft model… */
   model?: string;
+  /** …or a change to drafting (see cleanup.ts). */
+  variant?: DraftVariant;
   /** Drafts per case (default EVAL_DRAFTS_PER_CASE). */
   drafts?: number;
   complete?: Complete;
@@ -412,6 +415,7 @@ export async function runEval(runId: string, options: EvalRunOptions): Promise<v
               style: item.style === "crafted" ? "crafted" : "plain",
               leaveOut: item.sourceId,
               log: false,
+              ...(options.variant ? { variant: options.variant } : {}),
             });
             return scoreDraft({ name: profile.name, draft: evalText(result.body), published, rules, complete });
           }),

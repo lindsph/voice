@@ -51,6 +51,16 @@ describe("POST /evals/run", () => {
     expect(await res.json()).toEqual({ started: false, reason: "running", runId: "run-0" });
   });
 
+  it("passes a candidate's drafting variant to the run, and refuses an unknown one", async () => {
+    evalLib.evalStatus.mockResolvedValue({ running: null, due: null, caseCount: 7 });
+    evalLib.createEvalRun.mockResolvedValue({ id: "run-2" });
+    await postRun(req({ trigger: "candidate", label: "Clean-up pass", variant: "cleanup" }), params);
+    await afterFns[0]!();
+    expect(evalLib.runEval).toHaveBeenCalledWith("run-2", expect.objectContaining({ trigger: "candidate", variant: "cleanup" }));
+    const bad = await postRun(req({ trigger: "candidate", variant: "nope" }), params);
+    expect(bad.status).toBe(400);
+  });
+
   it("refuses without the key", async () => {
     const res = await postRun(req({}, "wrong"), params);
     expect(res.status).toBe(401);

@@ -2,6 +2,7 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { authorize } from "@/lib/auth";
+import { DRAFT_VARIANTS } from "@/lib/cleanup";
 import { createEvalRun, evalStatus, runEval } from "@/lib/eval";
 
 type Props = { params: Promise<{ id: string }> };
@@ -13,6 +14,8 @@ const runSchema = z.object({
   trigger: z.enum(["manual", "candidate"]).optional(),
   label: z.string().max(200).optional(),
   model: z.string().max(80).optional(),
+  /** Candidate runs: a change to drafting to try (see lib/cleanup.ts). */
+  variant: z.enum(DRAFT_VARIANTS).optional(),
 });
 
 /** Start a voice eval run. It finishes in the background; read the result from GET /evals. */
@@ -35,7 +38,7 @@ export async function POST(request: Request, { params }: Props) {
       return NextResponse.json({ started: false, reason: "no-cases" });
     }
     const run = await createEvalRun({ profileId: id, trigger, label: input.label });
-    after(() => runEval(run.id, { profileId: id, trigger, label: input.label, model: input.model }));
+    after(() => runEval(run.id, { profileId: id, trigger, label: input.label, model: input.model, variant: input.variant }));
     return NextResponse.json({ started: true, runId: run.id, trigger });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not start run";

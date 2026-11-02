@@ -906,3 +906,25 @@ describe("blog draft field bans", () => {
     users = [];
   });
 });
+
+describe("generateDraft clean-up variant", () => {
+  it("runs a second, editing-only call on whole pieces when asked", async () => {
+    const calls: string[] = [];
+    const result = await generateDraft({ ...draftInput(woolgrown, "social"), variant: "cleanup" }, async ({ system }) => {
+      calls.push(system);
+      return calls.length === 1 ? "Wool in the booth — come by." : "Wool in the booth. Come by.";
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toContain("You edit a draft");
+    expect(result.body).toBe("Wool in the booth. Come by.");
+  });
+
+  it("leaves drafts alone without the variant, and passage edits even with it", async () => {
+    const plain = vi.fn(async () => "Wool in the booth this week.");
+    await generateDraft(draftInput(woolgrown, "social"), plain);
+    expect(plain).toHaveBeenCalledTimes(1);
+    const passage = vi.fn(async () => "Wool in the booth this week.");
+    await generateDraft({ ...draftInput(woolgrown, "social"), format: "plain" as const, variant: "cleanup" }, passage);
+    expect(passage).toHaveBeenCalledTimes(1);
+  });
+});
