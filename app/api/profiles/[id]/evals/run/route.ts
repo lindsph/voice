@@ -16,6 +16,8 @@ const runSchema = z.object({
   model: z.string().max(80).optional(),
   /** Candidate runs: a change to drafting to try (see lib/cleanup.ts). */
   variant: z.enum(DRAFT_VARIANTS).optional(),
+  /** Candidate runs: the finished run to compare against (default: the last scheduled run). */
+  against: z.string().max(40).optional(),
 });
 
 /** Start a voice eval run. It finishes in the background; read the result from GET /evals. */
@@ -38,7 +40,7 @@ export async function POST(request: Request, { params }: Props) {
       return NextResponse.json({ started: false, reason: "no-cases" });
     }
     const run = await createEvalRun({ profileId: id, trigger, label: input.label });
-    after(() => runEval(run.id, { profileId: id, trigger, label: input.label, model: input.model, variant: input.variant }));
+    after(() => runEval(run.id, { profileId: id, trigger, label: input.label, model: input.model, variant: input.variant, against: input.against }));
     return NextResponse.json({ started: true, runId: run.id, trigger });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not start run";

@@ -69,6 +69,8 @@ export type EvalScores = {
   herCountedPer1k?: number;
   headToHead?: HeadToHead;
   real?: RealResults;
+  /** Candidate runs: the run they were compared against, when one was named. */
+  against?: string;
 };
 
 /** Readable prose from a blog JSON draft (lead, section heads and bodies, close); other bodies as is. */

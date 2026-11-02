@@ -152,7 +152,13 @@ export function evalAlerts(runs: RunSummary[]): { dropped: RunAlert | null; cand
   }
   let beat: RunAlert | null = null;
   const candidate = done.find((r) => r.trigger === "candidate");
-  const baseline = candidate ? scheduled.find((r) => r.startedAt <= candidate.startedAt) : undefined;
+  // A candidate compared against a named run beats that run, or nothing.
+  const against = candidate?.scores?.against;
+  const baseline = !candidate
+    ? undefined
+    : against
+      ? done.find((r) => r.id === against)
+      : scheduled.find((r) => r.startedAt <= candidate.startedAt);
   if (candidate?.scores && baseline?.scores && candidateBeat(baseline.scores, candidate.scores)) {
     beat = { runId: candidate.id, label: candidate.label, before: baseline.scores, after: candidate.scores, newCases: 0 };
   }
@@ -195,6 +201,8 @@ export type EvalRunOptions = {
   model?: string;
   /** …or a change to drafting (see cleanup.ts). */
   variant?: DraftVariant;
+  /** Candidate runs: a finished run to compare against (default: the last scheduled run). */
+  against?: string;
   /** Drafts per case (default EVAL_DRAFTS_PER_CASE). */
   drafts?: number;
   complete?: Complete;
@@ -362,14 +370,20 @@ async function realResults(
   };
 }
 
-/** The newest finished scheduled run's saved drafts, per case, for head-to-head. */
-async function baselineDrafts(profileId: string): Promise<Map<string, string[]>> {
+/**
+ * Saved drafts per case, for head-to-head: from the named run, or the newest
+ * finished scheduled run. A named run that isn't this profile's or isn't done is an error.
+ */
+async function baselineDrafts(profileId: string, against?: string): Promise<Map<string, string[]>> {
   const runs = await prisma.evalRun.findMany({
-    where: { profileId, status: "done", NOT: { trigger: "candidate" } },
+    where: against
+      ? { id: against, profileId, status: "done" }
+      : { profileId, status: "done", NOT: { trigger: "candidate" } },
     orderBy: { startedAt: "desc" },
     take: 1,
     select: { casesJson: true },
   });
+  if (against && runs.length === 0) throw new Error(`No finished run ${against} to compare against`);
   const out = new Map<string, string[]>();
   try {
     for (const c of JSON.parse(runs[0]?.casesJson ?? "[]") as Array<Partial<EvalCaseScore>>) {
@@ -393,7 +407,9 @@ export async function runEval(runId: string, options: EvalRunOptions): Promise<v
       prisma.evalCase.findMany({ where: { profileId: options.profileId }, orderBy: { createdAt: "asc" } }),
       listLearnings(options.profileId),
     ]);
-    const baseline = options.trigger === "candidate" ? await baselineDrafts(options.profileId) : new Map<string, string[]>();
+    const against = options.trigger === "candidate" ? options.against : undefined;
+    const baseline =
+      options.trigger === "candidate" ? await baselineDrafts(options.profileId, against) : new Map<string, string[]>();
     await prisma.evalRun.update({ where: { id: runId }, data: { caseCount: cases.length } });
     const scored: EvalCaseScore[] = [];
     for (const item of cases) {
@@ -451,7 +467,7 @@ export async function runEval(runId: string, options: EvalRunOptions): Promise<v
       where: { id: runId },
       data: {
         status: "done",
-        scoresJson: JSON.stringify(summarizeEval(scored, real)),
+        scoresJson: JSON.stringify({ ...summarizeEval(scored, real), ...(against ? { against } : {}) }),
         casesJson: JSON.stringify(scored),
         finishedAt: new Date(),
       },

@@ -149,6 +149,34 @@ describe("runEval", () => {
     expect(scores.headToHead).toEqual({ wins: 0, ties: 2, losses: 0 });
   });
 
+  it("compares a candidate against a named run when given one, and records it", async () => {
+    store.getProfile.mockResolvedValue({ name: "WoolGrown" });
+    store.listLearnings.mockResolvedValue([]);
+    db.evalCase.findMany.mockResolvedValue([cases[0]]);
+    db.generationLog.findMany = vi.fn().mockResolvedValue([]);
+    db.evalRun.findMany.mockResolvedValue([
+      { casesJson: JSON.stringify([{ sourceId: "urban", drafts: [{ draft: "Clean-up draft." }] }]) },
+    ]);
+    store.generateForProfile.mockResolvedValue({ body: "New draft." });
+    await runEval("run-4", { profileId: "woolgrown", trigger: "candidate", variant: "cleanup+captions", against: "run-cleanup", drafts: 1, complete: judge(5) });
+    expect(db.evalRun.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "run-cleanup", profileId: "woolgrown", status: "done" } }),
+    );
+    expect(store.generateForProfile).toHaveBeenCalledWith(expect.objectContaining({ variant: "cleanup+captions" }));
+    const scores = JSON.parse(db.evalRun.update.mock.calls.at(-1)![0].data.scoresJson);
+    expect(scores.against).toBe("run-cleanup");
+    expect(scores.headToHead).toEqual({ wins: 0, ties: 1, losses: 0 });
+  });
+
+  it("fails a candidate run whose named run doesn't exist", async () => {
+    store.getProfile.mockResolvedValue({ name: "WoolGrown" });
+    store.listLearnings.mockResolvedValue([]);
+    db.evalCase.findMany.mockResolvedValue([cases[0]]);
+    db.evalRun.findMany.mockResolvedValue([]);
+    await runEval("run-5", { profileId: "woolgrown", trigger: "candidate", against: "nope", complete: judge(5) });
+    expect(db.evalRun.update.mock.calls.at(-1)![0].data).toMatchObject({ status: "failed", error: "No finished run nope to compare against" });
+  });
+
   it("saves the run as failed instead of throwing when it cannot start", async () => {
     store.getProfile.mockRejectedValue(new Error("Unknown profile: nope"));
     store.listLearnings.mockResolvedValue([]);
@@ -183,6 +211,16 @@ describe("evalAlerts", () => {
 
   it("stays quiet with fewer than two scheduled runs or failed runs", () => {
     expect(evalAlerts([run("r1", "new-cases", 10, 3, 55)])).toEqual({ dropped: null, candidateBeat: null });
+  });
+
+  it("judges a candidate against the run it named, not the last scheduled run", () => {
+    const named = { ...run("c2", "candidate", 22, 2, 50, 7, "Captions"), scores: { passes: 2, cases: 7, keptPercent: 50, tellsPerCase: 1, against: "c1" } };
+    const cleanup = run("c1", "candidate", 21, 3, 50, 7, "Clean-up");
+    const plain = run("r1", "new-cases", 10, 1, 40);
+    // Beats plain Voice, but not the clean-up run it was measured against.
+    expect(evalAlerts([named, cleanup, plain]).candidateBeat).toBeNull();
+    // Named run missing from the list: no alert rather than the wrong comparison.
+    expect(evalAlerts([named, plain]).candidateBeat).toBeNull();
     expect(evalAlerts([{ ...run("r2", "new-cases", 20, 0, 0), status: "failed" }, run("r1", "new-cases", 10, 3, 55)])).toEqual({ dropped: null, candidateBeat: null });
   });
 });
