@@ -242,4 +242,13 @@ describe("generateForProfile logging", () => {
     await generateForProfile({ profileId: "woolgrown", surface: "social", facts: "At the CNE farm.", variant: "captions" });
     expect(generateDraft.mock.calls.at(-1)?.[0].captions).toBeUndefined();
   });
+
+  it("gives blog drafts the clean-up pass by default, and leaves other surfaces alone", async () => {
+    await generateForProfile({ profileId: "woolgrown", surface: "blog", facts: "Raised beds." });
+    expect(generateDraft.mock.calls.at(-1)?.[0].variant).toBe("cleanup");
+    await generateForProfile({ profileId: "woolgrown", surface: "blog", facts: "Raised beds.", variant: "none" });
+    expect(generateDraft.mock.calls.at(-1)?.[0].variant).toBe("none");
+    await generateForProfile({ profileId: "woolgrown", surface: "social", facts: "Raised beds." });
+    expect(generateDraft.mock.calls.at(-1)?.[0].variant).toBeUndefined();
+  });
 });

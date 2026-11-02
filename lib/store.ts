@@ -1,6 +1,6 @@
 import { prisma } from "./db";
 import { formatToneBundle } from "./bundle";
-import { type DraftVariant, variantHas } from "./cleanup";
+import { defaultBlogVariant, type DraftVariant, variantHas } from "./cleanup";
 import { generationLogInput, logGeneration } from "./generation-log";
 import { completeDraft, craftedApplies, CRAFTED_EFFORT, DRAFT_MODEL, generateDraft } from "./generate";
 import { inferPreference } from "./infer";
@@ -206,7 +206,7 @@ export async function generateForProfile(input: {
   leaveOut?: string;
   /** Voice eval runs pass false: a test draft is not a real generation to report on. */
   log?: boolean;
-  /** Voice eval candidate runs: a tested change to drafting. */
+  /** A change to drafting. Blog drafts default to defaultBlogVariant(); eval candidate runs name one. */
   variant?: DraftVariant;
 }): Promise<{
   body: string;
@@ -226,10 +226,11 @@ export async function generateForProfile(input: {
     leaveOut: input.leaveOut,
   });
   const model = input.model?.trim() || DRAFT_MODEL;
+  const variant = input.variant ?? (input.surface === "blog" ? defaultBlogVariant() : undefined);
   // Captions variant, whole pieces only: her closest social captions. Golds are
   // already left out for an eval case, so a test never sees her own answer.
   const captions =
-    variantHas(input.variant, "captions") && input.surface !== "social" && !input.task && input.format !== "plain"
+    variantHas(variant, "captions") && input.surface !== "social" && !input.task && input.format !== "plain"
       ? retrieveGolds(corpus.golds, {
           profileId: input.profileId,
           surface: "social",
@@ -266,7 +267,7 @@ export async function generateForProfile(input: {
       task: input.task,
       model,
       style: input.style,
-      variant: input.variant,
+      variant,
       ...(captions.length ? { captions } : {}),
     },
     (prompt) =>

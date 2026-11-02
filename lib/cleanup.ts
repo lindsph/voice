@@ -6,19 +6,33 @@
  * read smoother than she writes. Drafts ran 21 counted tells per 1,000 words
  * against her 13.
  *
- * A variant: only runs when a caller asks for it (eval candidate runs today).
- * The edit is kept only when it parses and counts no more tells than before.
+ * On by default for blog drafts (defaultBlogVariant); other surfaces only when a
+ * caller asks. The edit is kept only when it parses and counts no more tells than before.
  */
 
 import { blogDraftIssues, parseBlogJson } from "./blog-shape";
 import { countAntitheses, countEmDashes, findTricolons } from "./slop";
 
 /**
- * Tested changes to drafting. "captions" adds a few of her social captions to a
- * whole piece's prompt (see captionExamplesBlock in generate.ts); "+" combines.
+ * Changes to drafting. "captions" adds a few of her social captions to a whole
+ * piece's prompt (see captionExamplesBlock in generate.ts); "+" combines; "none"
+ * is plain drafting, for testing against the default.
  */
-export const DRAFT_VARIANTS = ["cleanup", "captions", "cleanup+captions"] as const;
+export const DRAFT_VARIANTS = ["none", "cleanup", "captions", "cleanup+captions"] as const;
 export type DraftVariant = (typeof DRAFT_VARIANTS)[number];
+
+/**
+ * Blog drafts get the clean-up pass unless the caller names a variant. Switched
+ * on 2 Nov 2026 after an eval candidate run on WoolGrown's 7 published posts
+ * (21 drafts): head-to-head 9 wins, 6 losses, 6 ties against plain drafting;
+ * counted tells 21.2 → 12.6 per 1,000 words (hers 12.7); sounds-like-her
+ * 4.5 → 4.6. Turn off without a code change:
+ * `flyctl secrets set VOICE_BLOG_VARIANT=none -a lindsay-voice`.
+ */
+export function defaultBlogVariant(env: string | undefined = process.env.VOICE_BLOG_VARIANT): DraftVariant {
+  const value = env?.trim();
+  return (DRAFT_VARIANTS as readonly string[]).includes(value ?? "") ? (value as DraftVariant) : "cleanup";
+}
 
 export function variantHas(variant: DraftVariant | undefined, part: "cleanup" | "captions"): boolean {
   return Boolean(variant?.split("+").includes(part));

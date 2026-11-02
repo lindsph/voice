@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { cleanupDraft, cleanupSystem, countedTells, mergeBlogEdit, variantHas } from "./cleanup";
+import { cleanupDraft, cleanupSystem, countedTells, defaultBlogVariant, mergeBlogEdit, variantHas } from "./cleanup";
 
 const post = {
   title: "At the CNE",
@@ -85,5 +85,12 @@ describe("cleanup pass", () => {
     expect(variantHas("cleanup+captions", "captions")).toBe(true);
     expect(variantHas("captions", "cleanup")).toBe(false);
     expect(variantHas(undefined, "cleanup")).toBe(false);
+  });
+
+  it("is on for blog drafts unless the off switch says otherwise", () => {
+    expect(defaultBlogVariant(undefined)).toBe("cleanup");
+    expect(defaultBlogVariant("none")).toBe("none");
+    expect(defaultBlogVariant("cleanup+captions")).toBe("cleanup+captions");
+    expect(defaultBlogVariant("typo")).toBe("cleanup");
   });
 });

@@ -947,3 +947,30 @@ describe("captions in the prompt", () => {
     expect(complete).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("clean-up pass runs once, on the final draft", () => {
+  it("cleans the rewrite, not the failed first draft", async () => {
+    const systems: string[] = [];
+    let n = 0;
+    const result = await generateDraft({ ...draftInput(woolgrown, "social"), variant: "cleanup" }, async ({ system }) => {
+      systems.push(system);
+      n += 1;
+      if (n === 1) return "Let us delve into wool.";
+      if (n === 2) return "Wool in the booth — come by.";
+      return "Wool in the booth. Come by.";
+    });
+    expect(systems.filter((s) => s.includes("You edit a draft"))).toHaveLength(1);
+    expect(result.retried).toBe(true);
+    expect(result.body).toBe("Wool in the booth. Come by.");
+  });
+
+  it("keeps the draft when the edit breaks a standing rule the draft didn't", async () => {
+    let n = 0;
+    const result = await generateDraft({ ...draftInput(woolgrown, "social"), variant: "cleanup" }, async () => {
+      n += 1;
+      return n === 1 ? "Wool in the booth this week." : "Let us delve into wool in the booth.";
+    });
+    expect(result.body).toBe("Wool in the booth this week.");
+    expect(result.warnings).toEqual([]);
+  });
+});

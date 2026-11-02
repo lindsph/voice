@@ -347,31 +347,29 @@ export async function generateDraft(
   const angle = craftedApplies(request) ? await planAngle(request, complete) : undefined;
   const input = angle ? { ...request, angle } : request;
   const user = buildUserPrompt(input);
-  const first = await cleanedUp(input, unwrapDraft(await complete({ system: input.profile.systemPrompt, user })), complete);
+  const first = unwrapDraft(await complete({ system: input.profile.systemPrompt, user }));
   const hits = draftHits(first, input);
   if (hits.length === 0) {
+    const body = await cleanedUp(input, first, [], complete);
     return {
-      body: headlineBody(input.task, first),
+      body: headlineBody(input.task, body),
       bundle: user,
       retried: false,
-      warnings: [],
+      warnings: draftHits(body, input),
       trace: draftTrace(input, null),
     };
   }
-  const second = await cleanedUp(
-    input,
-    unwrapDraft(
-      await complete({
-        system: input.profile.systemPrompt,
-        user: buildUserPrompt({
-          ...input,
-          retryContext: hits.map((item) => `- ${item}`).join("\n"),
-        }),
+  const second = unwrapDraft(
+    await complete({
+      system: input.profile.systemPrompt,
+      user: buildUserPrompt({
+        ...input,
+        retryContext: hits.map((item) => `- ${item}`).join("\n"),
       }),
-    ),
-    complete,
+    }),
   );
-  const body = second || first;
+  const drafted = second || first;
+  const body = await cleanedUp(input, drafted, draftHits(drafted, input), complete);
   return {
     body: headlineBody(input.task, body),
     bundle: user,
@@ -381,14 +379,20 @@ export async function generateDraft(
   };
 }
 
-/** The clean-up variant edits whole pieces only; one-line fields and passage edits stay as drafted. */
+/**
+ * The clean-up pass runs once, on the final draft, for whole pieces only; one-line
+ * fields and passage edits stay as drafted. The edit is kept only when it breaks
+ * no more standing rules than the draft did.
+ */
 async function cleanedUp(
-  input: { profile: Profile; surfaceId: string; format?: "blog" | "plain"; task?: ShopifyTask; variant?: DraftVariant },
+  input: Parameters<typeof draftHits>[1] & { profile: Profile; variant?: DraftVariant },
   body: string,
+  hits: string[],
   complete: ChatComplete,
 ): Promise<string> {
   if (!variantHas(input.variant, "cleanup") || input.task || input.format === "plain" || !body) return body;
-  return cleanupDraft({ name: input.profile.name, body, blog: isBlogShape(input) }, complete);
+  const cleaned = await cleanupDraft({ name: input.profile.name, body, blog: isBlogShape(input) }, complete);
+  return cleaned === body || draftHits(cleaned, input).length <= hits.length ? cleaned : body;
 }
 
 /**
