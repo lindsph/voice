@@ -1,6 +1,6 @@
 import { prisma } from "./db";
 import { formatToneBundle } from "./bundle";
-import type { DraftVariant } from "./cleanup";
+import { type DraftVariant, variantHas } from "./cleanup";
 import { generationLogInput, logGeneration } from "./generation-log";
 import { completeDraft, craftedApplies, CRAFTED_EFFORT, DRAFT_MODEL, generateDraft } from "./generate";
 import { inferPreference } from "./infer";
@@ -14,6 +14,7 @@ import { GUIDE_EXAMPLES_SOURCE, guideExampleParagraphs } from "./guide-examples"
 import { goldTitleFromPassage, herWritingSource } from "./her-writing";
 import { isQuotedSnippetRule, rejectedFromApprove } from "./learn";
 import { leaveOutSource } from "./eval-source";
+import { retrieveGolds } from "./retrieve";
 import { decideNewRule, ruleCheckEnabled, type RuleVerdict } from "./rule-check";
 import type { DraftTrace, Gold, GoldUpdate, Learning, Profile, Surface } from "./types";
 
@@ -151,6 +152,9 @@ export async function listLearnings(profileId: string): Promise<Learning[]> {
   return rows.map(toLearning);
 }
 
+/** Captions variant: how many of her social captions a longer piece's prompt gets (median 63 words each). */
+export const CAPTION_EXAMPLES = 6;
+
 export async function getBundle(input: {
   profileId: string;
   surface: string;
@@ -222,6 +226,18 @@ export async function generateForProfile(input: {
     leaveOut: input.leaveOut,
   });
   const model = input.model?.trim() || DRAFT_MODEL;
+  // Captions variant, whole pieces only: her closest social captions. Golds are
+  // already left out for an eval case, so a test never sees her own answer.
+  const captions =
+    variantHas(input.variant, "captions") && input.surface !== "social" && !input.task && input.format !== "plain"
+      ? retrieveGolds(corpus.golds, {
+          profileId: input.profileId,
+          surface: "social",
+          query: [input.facts, input.seed].filter(Boolean).join("\n"),
+          seed: input.seed ?? input.surface,
+          k: CAPTION_EXAMPLES,
+        })
+      : [];
   const sentGuide = input.guide?.trim() ?? "";
   const profile = sentGuide ? { ...corpus.profile, guide: sentGuide } : corpus.profile;
   if (sentGuide && sentGuide !== corpus.profile.guide.trim()) {
@@ -251,6 +267,7 @@ export async function generateForProfile(input: {
       model,
       style: input.style,
       variant: input.variant,
+      ...(captions.length ? { captions } : {}),
     },
     (prompt) =>
       completeDraft({

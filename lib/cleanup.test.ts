@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { cleanupDraft, cleanupSystem, countedTells, mergeBlogEdit } from "./cleanup";
+import { cleanupDraft, cleanupSystem, countedTells, mergeBlogEdit, variantHas } from "./cleanup";
 
 const post = {
   title: "At the CNE",
@@ -78,5 +78,12 @@ describe("cleanup pass", () => {
 
   it("counts em-dashes, contrasts and lists of three", () => {
     expect(countedTells("Wool — slow. It's not hype, it's soil.")).toBe(2);
+  });
+
+  it("reads combined variants", () => {
+    expect(variantHas("cleanup+captions", "cleanup")).toBe(true);
+    expect(variantHas("cleanup+captions", "captions")).toBe(true);
+    expect(variantHas("captions", "cleanup")).toBe(false);
+    expect(variantHas(undefined, "cleanup")).toBe(false);
   });
 });

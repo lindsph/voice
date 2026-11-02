@@ -213,4 +213,33 @@ describe("generateForProfile logging", () => {
     expect(logGeneration).not.toHaveBeenCalled();
     expect(result.generationId).toBeNull();
   });
+
+  it("gives a blog draft her closest social captions only with the captions variant", async () => {
+    const row = (id: string, surface: string, body: string) => ({
+      id,
+      profileId: "woolgrown",
+      title: id,
+      body,
+      rejected: "",
+      source: "Her writing",
+      surface,
+      architecture: "",
+      canonical: false,
+      status: "active",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    golds.mockResolvedValue([
+      row("cap-cne", "social", "Find us at the CNE farm building this week! Bring your soil questions."),
+      row("cap-felt", "social", "New felt pads in the shop."),
+      row("blog-1", "blog", "A blog post."),
+    ]);
+    await generateForProfile({ profileId: "woolgrown", surface: "blog", facts: "At the CNE farm.", variant: "cleanup+captions" });
+    const captions = generateDraft.mock.calls.at(-1)?.[0].captions as Array<{ id: string }>;
+    expect(captions.map((c) => c.id)).toContain("cap-cne");
+    expect(captions.map((c) => c.id)).not.toContain("blog-1");
+    await generateForProfile({ profileId: "woolgrown", surface: "blog", facts: "At the CNE farm.", variant: "cleanup" });
+    expect(generateDraft.mock.calls.at(-1)?.[0].captions).toBeUndefined();
+    await generateForProfile({ profileId: "woolgrown", surface: "social", facts: "At the CNE farm.", variant: "captions" });
+    expect(generateDraft.mock.calls.at(-1)?.[0].captions).toBeUndefined();
+  });
 });

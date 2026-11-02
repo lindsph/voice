@@ -1,5 +1,5 @@
 import { BLOG_SHAPE_INSTRUCTION, blogDraftIssues, blogProse, blogReaderText } from "./blog-shape";
-import { cleanupDraft, type DraftVariant } from "./cleanup";
+import { cleanupDraft, type DraftVariant, variantHas } from "./cleanup";
 import { collectToneSelection, formatToneBundle, type ToneBundleInput } from "./bundle";
 import {
   buildAnglePrompt,
@@ -26,7 +26,7 @@ import {
   type ShopifyExcerptTask,
 } from "./shopify-excerpt";
 import { bannedHits, lintDraft } from "./slop";
-import type { DraftTrace, Profile } from "./types";
+import type { DraftTrace, Gold, Profile } from "./types";
 
 export { ShopifyExcerptRejected, ShopifyHeadlineRejected };
 
@@ -124,6 +124,8 @@ export function buildUserPrompt(input: {
   style?: DraftStyle;
   /** Crafted only: the planned way in. */
   angle?: string;
+  /** Captions variant: her social captions, for how she sounds. */
+  captions?: Pick<Gold, "title" | "body">[];
   retryContext?: string;
 }): string {
   if (input.task === SHOPIFY_HEADLINE_TASK || input.task === SHOPIFY_EXCERPT_TASK) {
@@ -179,6 +181,7 @@ export function buildUserPrompt(input: {
       ...(crafted ? { rotateGolds: true } : {}),
     }),
     ...(crafted ? ["", craftPromptBlock(input.angle, { blog: blogShape })] : []),
+    ...(input.captions?.length ? ["", captionExamplesBlock(input.captions)] : []),
     ...(input.retryContext
       ? ["", "Previous draft failed a standing rule. Rewrite from scratch and fix:", input.retryContext]
       : []),
@@ -187,6 +190,15 @@ export function buildUserPrompt(input: {
       ? BLOG_SHAPE_INSTRUCTION
       : "Write the draft only — no title, no quotation marks around the whole thing, no preamble.",
   ].join("\n");
+}
+
+/** Captions in a longer piece's prompt: for her words and warmth, not their form. */
+export function captionExamplesBlock(captions: Pick<Gold, "title" | "body">[]): string {
+  return [
+    "Her social captions (how she sounds: word choice, warmth, how she talks about people and places).",
+    "Do not copy their length, emoji, hashtags or line breaks into this piece.",
+    ...captions.map((caption) => `---\n${caption.body.trim()}`),
+  ].join("\n\n");
 }
 
 function draftHits(
@@ -328,6 +340,7 @@ export async function generateDraft(
     style?: DraftStyle;
     /** A tested change to drafting; see cleanup.ts. */
     variant?: DraftVariant;
+    captions?: Pick<Gold, "title" | "body">[];
   },
   complete: ChatComplete,
 ): Promise<{ body: string; bundle: string; retried: boolean; warnings: string[]; trace: DraftTrace }> {
@@ -374,7 +387,7 @@ async function cleanedUp(
   body: string,
   complete: ChatComplete,
 ): Promise<string> {
-  if (input.variant !== "cleanup" || input.task || input.format === "plain" || !body) return body;
+  if (!variantHas(input.variant, "cleanup") || input.task || input.format === "plain" || !body) return body;
   return cleanupDraft({ name: input.profile.name, body, blog: isBlogShape(input) }, complete);
 }
 

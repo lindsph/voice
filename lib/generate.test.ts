@@ -928,3 +928,22 @@ describe("generateDraft clean-up variant", () => {
     expect(passage).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("captions in the prompt", () => {
+  it("adds her captions for voice, not form, when given", () => {
+    const user = buildUserPrompt({
+      ...draftInput(woolgrown, "blog"),
+      captions: [{ title: "cne", body: "Find us at the CNE farm building this week! 🐑 #CNE" }],
+    });
+    expect(user).toContain("Her social captions");
+    expect(user).toContain("Do not copy their length, emoji, hashtags");
+    expect(user).toContain("Find us at the CNE farm building this week!");
+    expect(buildUserPrompt(draftInput(woolgrown, "blog"))).not.toContain("Her social captions");
+  });
+
+  it("runs the clean-up pass for the combined variant", async () => {
+    const complete = vi.fn(async () => "Wool in the booth this week.");
+    await generateDraft({ ...draftInput(woolgrown, "social"), variant: "cleanup+captions" }, complete);
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
+});

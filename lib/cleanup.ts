@@ -13,8 +13,16 @@
 import { blogDraftIssues, parseBlogJson } from "./blog-shape";
 import { countAntitheses, countEmDashes, findTricolons } from "./slop";
 
-export const DRAFT_VARIANTS = ["cleanup"] as const;
+/**
+ * Tested changes to drafting. "captions" adds a few of her social captions to a
+ * whole piece's prompt (see captionExamplesBlock in generate.ts); "+" combines.
+ */
+export const DRAFT_VARIANTS = ["cleanup", "captions", "cleanup+captions"] as const;
 export type DraftVariant = (typeof DRAFT_VARIANTS)[number];
+
+export function variantHas(variant: DraftVariant | undefined, part: "cleanup" | "captions"): boolean {
+  return Boolean(variant?.split("+").includes(part));
+}
 
 type Complete = (input: { system: string; user: string }) => Promise<string>;
 
