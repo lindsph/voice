@@ -36,10 +36,22 @@ describe("upsertEvalCase", () => {
   });
 
   it("uses the facts a host sends, for pieces drafted before Voice logged them", async () => {
+    db.generationLog.findFirst.mockResolvedValue(null);
     db.evalCase.upsert.mockResolvedValue({ id: "c2" });
     await upsertEvalCase({ profileId: "woolgrown", sourceId: "urban", surfaceId: "blog", finalBody: "Hers.", facts: "Rebuilt brief" });
-    expect(db.generationLog.findFirst).not.toHaveBeenCalled();
     expect(db.evalCase.upsert.mock.calls[0]![0].create).toMatchObject({ facts: "Rebuilt brief", generationId: null });
+  });
+
+  it("keeps the link to her real draft when a host sends a fresher brief", async () => {
+    db.generationLog.findFirst.mockResolvedValue({
+      id: "gen-7", facts: "OLD BRIEF", architecture: "proof-story", model: "claude-opus-4-6", style: "plain",
+    });
+    db.evalCase.upsert.mockResolvedValue({ id: "c3" });
+    await upsertEvalCase({
+      profileId: "woolgrown", sourceId: "calgary", surfaceId: "blog", finalBody: "Hers.", facts: "Today's brief", architecture: "event-notes",
+    });
+    const args = db.evalCase.upsert.mock.calls[0]![0];
+    expect(args.update).toMatchObject({ facts: "Today's brief", architecture: "event-notes", generationId: "gen-7" });
   });
 
   it("refuses a piece with no brief anywhere, and an empty published body", async () => {

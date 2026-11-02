@@ -56,19 +56,20 @@ export async function upsertEvalCase(input: EvalCaseInput) {
   let architecture = input.architecture ?? null;
   let model = input.model ?? null;
   let style: string = input.style ?? "plain";
-  let generationId: string | null = null;
+  // The newest real draft of this piece. Linked even when the host sends a fresher
+  // brief, so real results (what she kept of that draft) stay on the case.
+  const log = await prisma.generationLog.findFirst({
+    where: { profileId: input.profileId, seed: sourceId, surfaceId: input.surfaceId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, facts: true, architecture: true, model: true, style: true },
+  });
+  const generationId = log?.id ?? null;
   if (!facts) {
-    const log = await prisma.generationLog.findFirst({
-      where: { profileId: input.profileId, seed: sourceId, surfaceId: input.surfaceId },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, facts: true, architecture: true, model: true, style: true },
-    });
     if (!log) throw new EvalCaseError(`No brief for ${sourceId}: send facts, or draft it through Voice first`);
     facts = log.facts;
     architecture = architecture ?? log.architecture;
     model = model ?? log.model;
     style = input.style ?? log.style;
-    generationId = log.id;
   }
   const data = {
     surfaceId: input.surfaceId,
